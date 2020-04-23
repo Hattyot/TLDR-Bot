@@ -1,5 +1,5 @@
 import pymongo
-from config import MONGODB_URL
+from config import MONGODB_URL, DEV_IDS
 from modules import cache
 
 
@@ -39,7 +39,7 @@ class Connection:
                     'parliamentary': [
                         ('Citizen', 5),
                         ('Party Member', 5),
-			('Party Campaigner', 5),
+                        ('Party Campaigner', 5),
                         ('Local Councillor', 5),
                         ('Council Chair', 5),
                         ('Mayor', 5),
@@ -104,7 +104,8 @@ class Connection:
     @cache.cache()
     def get_user_timer(self, guild_id, user_id, event):
         self._get_timers(guild_id)
-        match = self.timers.find_one({'guild_id': guild_id}, {'timers': {'$elemMatch': {'extras.member_id': user_id, 'event': event}}})
+        match = self.timers.find_one({'guild_id': guild_id},
+                                     {'timers': {'$elemMatch': {'extras.member_id': user_id, 'event': event}}})
         return match['timers'][0] if match and 'timers' in match else False
 
     def _get_cases(self, guild_id):
