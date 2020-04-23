@@ -318,16 +318,20 @@ class Levels(commands.Cog):
                 break
 
             user_id, user_values = u
-            member = self.bot.get_user(user_id)
+            member = ctx.guild.get_member(user_id)
             if member is None:
-                member = await self.bot.fetch_user(user_id)
+                try:
+                    member = await ctx.guild.fetch_member(user_id)
+                except:
+                    i -= 1
+                    continue
 
             role_level = await self.user_role_level(ctx, branch, member)
             user_role_name = user_values[f'{pre}_role']
             if user_role_name == '':
                 continue
             user_role = discord.utils.find(lambda r: r.name == user_role_name, ctx.guild.roles)
-            page_message = f'**#{i + 1}** - <@{user_id}> | **Level {role_level}** <@&{user_role.id}>'
+            page_message = f'**#{i + 1}** - {member.name} | **Level {role_level}** <@&{user_role.id}>'
             lboard[page_num].append(page_message)
 
         if not lboard[user_page]:
