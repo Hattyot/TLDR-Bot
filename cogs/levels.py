@@ -372,6 +372,13 @@ class Levels(commands.Cog):
                 lboard_str += f'***`#{i + 1}`*** - *{member.name} | **Level {role_level}** {user_role_name}*\n'
             else:
                 lboard_str += f'`#{i + 1}` - {member.name} | **Level {role_level}** {user_role_name}\n'
+            user_role_name = user_values[f'{pre}_role']
+            if user_role_name == '':
+                continue
+            user_role = discord.utils.find(lambda r: r.name == user_role_name, ctx.guild.roles)
+            page_message = f'**#{i + 1}** - {member.name} | **Level {role_level}** <@&{user_role.id}>'
+            lboard[page_num].append(page_message)
+            lboard_str += f'**#{i + 1}** - {member.name} | **Level {role_level}** {user_role_name}\n'
 
         if lboard_str == '':
             description = 'Damn, this place is empty'
