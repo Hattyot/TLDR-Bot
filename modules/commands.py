@@ -1,7 +1,7 @@
 import discord
 import config
 import copy
-
+import config
 from discord.ext.commands.core import hooked_wrapped_callback
 from modules import database, embed_maker
 from typing import Callable, Union
@@ -150,19 +150,15 @@ class Clearance:
         """
         clearance = {"groups": [], "roles": ["User"], "user_id": member.id}
         member_role_ids = [role.id for role in member.roles]
-
         # assign roles
         for role_name, role_id in self.roles.items():
             if role_id in member_role_ids:
                 clearance["roles"].append(role_name)
-
                 # assign a group in role is in a group
                 for group_name, roles in self.groups.items():
                     if role_name in roles and group_name not in clearance["groups"]:
                         clearance["groups"].append(group_name)
-
         return clearance
-
     @staticmethod
     def highest_member_clearance(member_clearance: dict):
         """Function that returns the highest group or role user has."""
@@ -283,8 +279,11 @@ class Command(discord.ext.commands.Command):
 
     def access_given(self, member: discord.Member):
         """Return True if member has been given access to command, otherwise return False."""
-        command_clearance = self.bot.clearance.command_clearance(self)
-        return member.id in command_clearance["users"]
+        if config.MODULES['clearance']:
+            command_clearance = self.bot.clearance.command_clearance(self)
+            return member.id in command_clearance["users"]
+        else:
+            return True
 
     def module_dependency(self):
         """Returns None if all module dependencies are met, otherwise returns name of missing dependency."""
@@ -295,11 +294,14 @@ class Command(discord.ext.commands.Command):
 
     def can_use(self, member: discord.Member):
         """Returns True if member can use command, otherwise return False."""
-        command_clearance = self.bot.clearance.command_clearance(self)
-        member_clearance = self.bot.clearance.member_clearance(member)
-        return self.bot.clearance.member_has_clearance(
-            member_clearance, command_clearance
-        )
+        if config.MODULES['clearance']:
+            command_clearance = self.bot.clearance.command_clearance(self)
+            member_clearance = self.bot.clearance.member_clearance(member)
+            return self.bot.clearance.member_has_clearance(
+                member_clearance, command_clearance
+            )
+        else:
+            return True
 
     def get_help(self, member: discord.Member = None) -> Help:
         """

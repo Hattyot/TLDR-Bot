@@ -709,20 +709,34 @@ class Utility(Cog):
                 help_object[cog_name] = [command]
             else:
                 help_object[cog_name].append(command)
+        
+        if config.MODULES['clearance']:
+            member_clearance = self.bot.clearance.member_clearance(ctx.author)
+        else:
+            member_clearance = {
+                "groups": ["Staff"],
+                "roles": ["User","Staff"],
+                "user_id": ctx.author.id
+            }
 
-        member_clearance = self.bot.clearance.member_clearance(ctx.author)
         # if user didnt ask for a specific command, display all the available categories and commands to the user
         if command_name is None:
-            highest_member_clearance = self.bot.clearance.highest_member_clearance(
-                member_clearance
-            )
+            if config.MODULES['clearance']:
+                highest_member_clearance = self.bot.clearance.highest_member_clearance(
+                    member_clearance
+                )
 
-            embed = await embed_maker.message(
-                ctx,
-                description=f"**Prefix** : `{ctx.prefix}`\nFor additional info on a command, type `{ctx.prefix}help [command]`",
-                author={"name": f"Help - {highest_member_clearance}"},
-            )
-
+                embed = await embed_maker.message(
+                    ctx,
+                    description=f"**Prefix** : `{ctx.prefix}`\nFor additional info on a command, type `{ctx.prefix}help [command]`",
+                    author={"name": f"Help - {highest_member_clearance}"},
+                )
+            else:
+                embed = await embed_maker.message(
+                    ctx,
+                    description=f"**Prefix** : `{ctx.prefix}`\nFor additional info on a command, type `{ctx.prefix}help [command]`",
+                    author={"name": f"Help - "},
+                )
             sorted_cog_names = [
                 "Leveling",
                 "Utility",
