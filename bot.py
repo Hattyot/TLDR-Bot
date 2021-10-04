@@ -21,7 +21,7 @@ import modules.commands
 import modules.slack_bridge
 import modules.tasks
 import modules.instagram
-
+import modules.clearance_fake
 from twtsc import Twtsc
 
 from datetime import datetime
@@ -69,7 +69,7 @@ class TLDR(Bot):
         self.invite_logger = modules.invite_logger.InviteLogger(self) if self.enabled_modules['invite_logger'] else None
         self.moderation = modules.moderation.ModerationSystem(self) if self.enabled_modules['moderation'] else None
         self.ukparl_module = modules.ukparliament.UKParliamentModule(self) if self.enabled_modules['ukparl_module'] else None
-        self.clearance = modules.commands.Clearance(self) if self.enabled_modules['clearance'] else None
+        self.clearance = modules.commands.Clearance(self) if self.enabled_modules['clearance'] else modules.clearance_fake.Clearance_fake(self)
         self.slack_bridge = modules.slack_bridge.Slack(self) if self.enabled_modules['slack_bridge'] else None
         self.tasks = modules.tasks.Tasks(self) if self.enabled_modules['tasks'] else None
         self.twtsc = Twtsc() if self.enabled_modules['twtsc'] else None
