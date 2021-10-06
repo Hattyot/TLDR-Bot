@@ -1,33 +1,29 @@
-from io import BytesIO
-from cachetools.ttl import TTLCache
-from bot import TLDR
+import configparser
+import os
+import random
+import string
+import time
 from datetime import datetime
+from io import BytesIO
+from typing import Union
+
+import aiofiles
+import config
 import discord
+from bot import TLDR
+from cachetools.ttl import TTLCache
+from discord import File
 from discord.embeds import Embed
 from discord.guild import Guild
-import time
-import aiofiles
-import random
-from discord import File
-import string
-from typing import Union
+
+from modules import database, timers
+from ukparliament.bills_tracker import (BillsStorage, Conditions, Feed,
+                                        FeedUpdate, PublicationUpdate)
+from ukparliament.divisions_tracker import DivisionStorage
 from ukparliament.structures.bills import Bill, CommonsDivision, LordsDivision
 from ukparliament.structures.members import ElectionResult, PartyMember
-from ukparliament.bills_tracker import (
-    Conditions,
-    Feed,
-    FeedUpdate,
-    BillsStorage,
-    PublicationUpdate,
-)
-from ukparliament.divisions_tracker import DivisionStorage
-from ukparliament.utils import BetterEnum
-from discord.ext import tasks
 from ukparliament.ukparliament import UKParliament
-from modules import database
-import config
-import os
-import configparser
+from ukparliament.utils import BetterEnum
 
 
 class UKParliamentConfig:
@@ -462,7 +458,7 @@ class UKParliamentModule:
     def get_guild(self) -> Union[Guild, None]:
         return self._guild
 
-    @tasks.loop(seconds=60)
+    @timers.loop(seconds=60)
     async def tracker_event_loop(self):
         division_listener = (
             self.tracker_status["lordsdivisions"]["started"]
