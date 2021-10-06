@@ -761,6 +761,9 @@ class UKParliamentModule:
                 "colour": PartyColour.from_id(party_id).value["colour"],
             }
 
+        if config.WEB_API_URL == "":
+            raise Exception("WEB_API_URL for image processor has not been set.")
+
         async with self.aiohttp_session.post(
             f"{config.WEB_API_URL}/divisionimage",
             json={
