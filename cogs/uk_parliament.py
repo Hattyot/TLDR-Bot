@@ -1,24 +1,22 @@
-from datetime import datetime
 import functools
-from io import BytesIO
 import math
+from datetime import datetime
+from io import BytesIO
 from typing import Union
 
-from discord.ext.commands.converter import TextChannelConverter
-from discord.file import File
-from modules import database
-from modules.custom_commands import Guild
-from modules.reaction_menus import BookMenu
-from discord import embeds
-
-from ukparliament.structures.bills import Bill, CommonsDivision, LordsDivision
-from bot import TLDR
-from modules import embed_maker
 import modules.commands as cls
-from modules.utils import ParseArgs
+from bot import TLDR
+from discord import embeds
 from discord.ext import commands
 from discord.ext.commands import Context
+from discord.ext.commands.converter import TextChannelConverter
+from discord.file import File
+from modules import database, embed_maker
+from modules.custom_commands import Guild
+from modules.reaction_menus import BookMenu
+from modules.utils import ParseArgs
 from ukparliament.bills import SearchBillsBuilder, SearchBillsSortOrder
+from ukparliament.structures.bills import Bill, CommonsDivision, LordsDivision
 from ukparliament.utils import URL_BILLS
 
 
@@ -254,13 +252,8 @@ class UK(commands.Cog):
             examples=["uk mod tracker channels"],
             sub_commands=["bills", "divisions", "minfo", "mpelection", "mod"],
         ),
-        sub_commands=[
-            "bills",
-            "divisions",
-            "minfo",
-            "mpelection",
-        ],
         cls=cls.Group,
+        module_dependency=["ukparl_module"],
     )
     async def uk(self, ctx: commands.Context):
         return await embed_maker.command_error(ctx)
@@ -270,8 +263,8 @@ class UK(commands.Cog):
         invoke_without_command=True,
         usage="uk bills [sub command]",
         examples=["uk bills search European Withdrawal"],
-        sub_commands=["search"],
         cls=cls.Group,
+        module_dependency=["ukparl_module"],
     )
     async def bills(self, ctx: commands.Context):
         return await embed_maker.command_error(ctx)
@@ -282,8 +275,8 @@ class UK(commands.Cog):
         invoke_without_command=True,
         usage="uk divisions [sub command]",
         examples=["uk divisions lsearch [args]"],
-        sub_commands=["lsearch", "csearch", "linfo", "cinfo"],
         cls=cls.Group,
+        module_dependency=["ukparl_module"],
     )
     async def divisions(self, ctx: commands.Context):
         return await embed_maker.command_error(ctx)
@@ -294,8 +287,8 @@ class UK(commands.Cog):
         help="Moderator level commands for this feature",
         usage="uk mod [sub command]",
         examples=["uk mod tracker [args]"],
-        sub_commands=["tracker"],
         cls=cls.Group,
+        module_dependency=["ukparl_module"],
     )
     async def mod_commands(self, ctx: commands.Context):
         return await embed_maker.command_error(ctx)
@@ -306,16 +299,8 @@ class UK(commands.Cog):
         help="Commands related to the trackering section of this feature",
         usage="uk mod tracker [sub command]",
         examples=["uk mod tracker channels"],
-        sub_commands=[
-            "channels",
-            # "load",
-            "statuses",
-            "loop",
-            "dbclear",
-            "dbstats",
-            "ping",
-        ],
         cls=cls.Group,
+        module_dependency=["ukparl_module"],
     )
     async def mod_cmd_tracker(self, ctx: commands.Context):
         return await embed_maker.command_error(ctx)
@@ -326,6 +311,7 @@ class UK(commands.Cog):
         usage="uk mod ping",
         examples=["uk mod ping"],
         cls=cls.Command,
+        module_dependency=["ukparl_module"],
     )
     async def mod_cmd_ping(self, ctx: commands.Context):
         if self.loaded is False:
@@ -357,6 +343,7 @@ class UK(commands.Cog):
         usage="uk mod tracker dbclear",
         examples=["uk mod tracker dbclear", "uk mod tracker dbclear [auth code]"],
         cls=cls.Command,
+        module_dependency=["ukparl_module"],
     )
     async def mod_cmd_tracker_db_clear(self, ctx: commands.Context, code: str = ""):
         if self.loaded is False:
@@ -397,6 +384,7 @@ class UK(commands.Cog):
         usage="uk mod tracker dbstats",
         clearence="dev",
         cls=cls.Command,
+        module_dependency=["ukparl_module"],
     )
     async def mod_cmd_tracker_db_stats(self, ctx: commands.Context):
         if self.loaded is False:
@@ -418,6 +406,7 @@ class UK(commands.Cog):
         usage="uk mod tracker statuses",
         examples=["uk mod tracker statuses"],
         cls=cls.Command,
+        module_dependency=["ukparl_module"],
     )
     async def mod_cmd_tracker_statuses(self, ctx: commands.Context):
         if self.loaded is False:
@@ -451,6 +440,7 @@ class UK(commands.Cog):
         usage="uk mod tracker channels [args]",
         examples=["uk mod tracker channels", "uk mod tracker channels set [args]"],
         cls=cls.Group,
+        module_dependency=["ukparl_module"],
     )
     async def mod_cmd_tracker_channels(self, ctx: commands.Context):
         if self.loaded is False:
@@ -484,6 +474,7 @@ class UK(commands.Cog):
         usage="uk mod tracker loop",
         examples=["uk mod tracker loop start", "uk mod tracker loop stop"],
         cls=cls.Group,
+        module_dependency=["ukparl_module"],
     )
     async def mod_cmd_tracker_eventloop(self, ctx: commands.Context):
         if self.loaded is False:
@@ -503,6 +494,7 @@ class UK(commands.Cog):
         usage="uk mod tracker loop start",
         examples=["uk mod tracker loop start"],
         cls=cls.Command,
+        module_dependency=["ukparl_module"],
     )
     async def mod_cmd_tracker_eventloop_start(self, ctx: commands.Context):
         if self.loaded is False:
@@ -535,6 +527,7 @@ class UK(commands.Cog):
         usage="uk mod tracker loop stop",
         examples=["uk mod tracker loop stop"],
         cls=cls.Command,
+        module_dependency=["ukparl_module"],
     )
     async def mod_cmd_tracker_eventloop_stop(self, ctx: commands.Context):
         if self.loaded is False:
@@ -554,6 +547,7 @@ class UK(commands.Cog):
         usage="uk mod tracker channels set [tracker_id] [channel_id or mention]",
         examples=["uk mod tracker channelts set royalassent #royal-assent"],
         cls=cls.Command,
+        module_dependency=["ukparl_module"],
     )
     async def mod_cmd_tracker_channels_set(
         self,
@@ -609,6 +603,7 @@ class UK(commands.Cog):
             ),
             (("--historical", "-h", str), "Get list of recorded election results"),
         ],
+        module_dependency=["ukparl_module"],
     )
     async def mp_elections(
         self, ctx: commands.Context, *, args: Union[ParseArgs, str] = ""
@@ -725,8 +720,8 @@ class UK(commands.Cog):
                 "The name of the mp (used only if you're using the other args",
             ),
         ],
-        clearence="User",
         cls=cls.Command,
+        module_dependency=["ukparl_module"],
     )
     async def member_info(
         self, ctx: commands.Context, *, args: Union[ParseArgs, str] = ""
@@ -880,8 +875,8 @@ class UK(commands.Cog):
         help="Get House of Lords Division information",
         usage="uk divisions linfo [division id]",
         examples=["uk divisions linfo 1234"],
-        clearence="User",
         cls=cls.Command,
+        module_dependency=["ukparl_module"],
     )
     async def division_lord_info(self, ctx: commands.Context, division_id: int = -1):
         if self.loaded is False:
@@ -921,8 +916,8 @@ class UK(commands.Cog):
         help="Get House of Commons Division information",
         usage="uk divisions cinfo [division id]",
         examples=["uk divisions cinfo 1234"],
-        clearence="User",
         cls=cls.Command,
+        module_dependency=["ukparl_module"],
     )
     async def division_common_info(self, ctx: commands.Context, division_id: int):
         if self.loaded is False:
@@ -957,8 +952,8 @@ class UK(commands.Cog):
         help="Search for commons divisions",
         usage="uk divisions csearch [search term]",
         examples=["uk divisions csearch European"],
-        clearence="User",
         cls=cls.Command,
+        module_dependency=["reaction_menus"],
     )
     async def division_commons_search(self, ctx: commands.Context, *, search_term=""):
         if self.loaded is False:
@@ -1000,8 +995,8 @@ class UK(commands.Cog):
         help="Search for lords divisions",
         usage="uk divisions lsearch [search term]",
         examples=["uk divisions lsearch European"],
-        clearence="User",
         cls=cls.Command,
+        module_dependency=["ukparl_module"],
     )
     async def division_lords_search(self, ctx: commands.Context, *, search_term=""):
         if self.loaded is False:
@@ -1045,10 +1040,10 @@ class UK(commands.Cog):
     @bills.command(
         name="info",
         help="To display in more detail information about a bill.",
-        clearence="User",
         usage="uk bills info [bill id]",
         examples=["uk bills info 1234"],
         cls=cls.Command,
+        module_dependency=["reaction_menus", "ukparl_module"],
     )
     async def bill_info(self, ctx: commands.Context, bill_id: int):
         if self.loaded is False:
@@ -1102,7 +1097,6 @@ class UK(commands.Cog):
             "uk bills search --sponsor Rishu Sunak",
         ],
         name="search",
-        clearence="User",
         command_args=[
             (("--query", "-q", str), "Search Term to search for"),
             (("--sponsor", "-s", str), "The name of the bill sponsor"),
@@ -1112,6 +1106,7 @@ class UK(commands.Cog):
             (("--originatinghouse", "-oh", str), "The house the bill originated in"),
         ],
         cls=cls.Command,
+        module_dependency=["reaction_menus", "ukparl_module"],
     )
     async def bills_search(
         self, ctx: commands.Context, *, args: Union[ParseArgs, str] = ""

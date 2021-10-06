@@ -162,7 +162,10 @@ class Connection:
         The guild settings collection
             {
                 'guild_id': :class:`int`,
-                'mute_role_id': :class:`int`
+                'mute_role_id': :class:`int`,
+                'slack_bridges': {
+                   'slack_channel_id': 'discord_channel_id'
+                }
             }
     bills_tracker: :class:`pymongo.collection.Collection`
         The bills tracker collection:
@@ -180,11 +183,45 @@ class Connection:
     webhooks: :class:`pymongo.collection.Collection`
         The webhooks collection
             {
-                "guild_id" : :class:`int`,
+                "channel_id": :class:`int`,
                 'url': :class:`str`
             }
+    slack_bridge :class:`pymongo.collection.Collection`
+        The collection for the slack bridge system
+            {
+                'aliases': [
+                    {
+                        "slack_id": :class:`str`
+                        "discord_id": :class:`int`
+                    }
+                ]
+                'bridges': [
+                    {
+                        "slack_channel_id": :class:`str`
+                        "discord_channel_id": :class:`int`
+                    }
+                ]
+            }
+    slack_messages :class:`pymongo.collection.Collection`
+        The collection for keeping track of which slack message corresponds to which discord message and vice-versa.
+            {
+                'slack_message_id': :class:`str`
+                'discord_message_id': :class:`int`
+                'slack_channel_id': :class:`str`
+                'discord_channel_id': :class:`str`
+                'origin': :class:`str`
+                'files': :class:`list`
+                'text': :class:`str`
+                'user_id': :class`str`
+                'timestamp': :class:`int`
+            }
+    tasks :class:`pymongo.collection.Collection`
+        The collection for linking the api and the main bot through running tasks.
+            {
+                'function': :class:`str`  # name of the function in tasks that will be called
+                'kwargs': :class:`dict`
+            }
     """
-
     def __init__(self):
         self.mongo_client = pymongo.MongoClient(config.MONGODB_URL)
         self.db = self.mongo_client["TLDR"]
@@ -202,6 +239,9 @@ class Connection:
         self.divisions_tracker = self.db["divisions_tracker"]
         self.guild_settings = self.db["guild_settings"]
         self.webhooks = self.db['webhooks']
+        self.slack_bridge = self.db['slack_bridge']
+        self.slack_messages = self.db['slack_messages']
+        self.tasks = self.db['tasks']
 
     def clear_bills_tracker_collection(self):
         self.bills_tracker.delete_many({})

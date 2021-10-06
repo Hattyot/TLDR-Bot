@@ -11,8 +11,12 @@ class InviteLogger:
 
         self.bot.add_listener(self._on_member_join, 'on_member_join')
         self.bot.add_listener(self._on_invite_create, 'on_invite_create')
+        self.bot.add_listener(self._on_ready, 'on_ready')
 
         self.bot.logger.info('InviteLogger module has been initiated')
+
+    async def _on_ready(self):
+        await self.initialize_invites()
 
     async def initialize_invites(self):
         await self.bot.wait_until_ready()

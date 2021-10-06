@@ -57,7 +57,7 @@ class Mod(Cog):
                                f'**By:** <@{case.moderator_id}>\n' \
                                f'**Reason:** {reason}\n\n'
         else:
-            description = f'This user has no {case_type}s'
+            description = f'This user has no {case_type if case_type else "case"}s'
 
         name_switch = {
             'warn': 'Warnings',
@@ -111,7 +111,8 @@ class Mod(Cog):
         usage='cases [member] [case type] (page)',
         examples=['cases hattyot warn', 'warns hattyot ban 2'],
         aliases=['case'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['reaction_menus', 'moderation']
     )
     async def cases(self, ctx: Context, member_and_case_type: str = None):
         if member_and_case_type is None:
@@ -142,7 +143,8 @@ class Mod(Cog):
         usage='warn [member] [reason]',
         examples=['warn hattyot broke cg 10 several times'],
         aliases=['warning'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['moderation']
     )
     async def warn(self, ctx: Context, *, member_and_reason: str = None):
         if member_and_reason is None:
@@ -245,7 +247,8 @@ class Mod(Cog):
         help='Mute a member',
         usage='mute [member] [duration] [reason]',
         examples=['mute hattyot 7d 5h 10m 50s abused the bot'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['timers', 'moderation']
     )
     async def mute(self, ctx: Context, *, member_and_duration_and_reason: str = None):
         if member_and_duration_and_reason is None:
@@ -366,7 +369,8 @@ class Mod(Cog):
         help='Ban a member, their leveling data will be erased',
         usage='ban [member] [reason]',
         examples=['ban hattyot completely ignore cg'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['moderation']
     )
     async def ban(self, ctx: Context, *, member_and_reason: str = None):
         if member_and_reason is None:
@@ -417,7 +421,8 @@ class Mod(Cog):
         help='Manage the watchlist, which logs all the users message to a channel',
         usage='watchlist (sub command) (args)',
         examples=['watchlist'],
-        cls=commands.Group
+        cls=commands.Group,
+        module_dependency=['watchlist']
     )
     async def watchlist(self, ctx: Context):
         if ctx.subcommand_passed is None:
@@ -457,7 +462,8 @@ class Mod(Cog):
         command_args=[
             (('--filter', '-f', list), 'A regex filter that will be matched against the users message, if a match is found, mods will be @\'d'),
         ],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['watchlist']
     )
     async def watchlist_add(self, ctx: Context, *, args: Union[ParseArgs, dict] = None):
         if not args:
@@ -490,7 +496,8 @@ class Mod(Cog):
         help='remove a user from the watchlist',
         usage='watchlist remove [user]',
         examples=['watchlist remove hattyot'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['watchlist']
     )
     async def watchlist_remove(self, ctx: Context, *, user: str = None):
         if user is None:
@@ -521,7 +528,8 @@ class Mod(Cog):
         command_args=[
             (('--filter', '-f', list), 'A regex filter that will be matched against the users message, if a match is found, mods will be @\'d'),
         ],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['watchlist'],
     )
     async def watchlist_add_filters(self, ctx: Context, *, args: Union[ParseArgs, dict] = None):
         if not args:
@@ -609,6 +617,7 @@ class Mod(Cog):
         aliases=['dd', 'dailydebate'],
         examples=['dailydebates'],
         cls=commands.Group,
+        module_dependency=['timers', 'reaction_menus']
     )
     async def dailydebates(self, ctx: Context, page: str = 1):
         if ctx.subcommand_passed is None:
@@ -659,7 +668,8 @@ class Mod(Cog):
         help='Disable the daily debates system, time will be set to 0',
         usage='dailydebates disable',
         examples=['dailydebates disable'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['timers']
     )
     async def dailydebates_disable(self, ctx: Context):
         db.daily_debates.update_one({'guild_id': ctx.guild.id}, {'$set': {'time': 0}})
@@ -684,7 +694,8 @@ class Mod(Cog):
         command_args=[
             (('--option', '-o', list), 'Option for the poll'),
         ],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['timers']
     )
     async def dailydebates_set_poll_options(self, ctx: Context, index: str = None, *, args: Union[ParseArgs, dict] = None):
         if index is None:
@@ -737,7 +748,8 @@ class Mod(Cog):
             (('--topic_author', '-ta', str), 'Original author of the topic, that will be mentioned when the dd is sent, they will also be given a 15% boost for 6 hours'),
             (('--option', '-o', list), 'Option for the poll'),
         ],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['timers']
     )
     async def dailydebates_add(self, ctx: Context, *, args: Union[ParseArgs, dict] = None):
         if args is None:
@@ -781,7 +793,8 @@ class Mod(Cog):
             (('--topic_author', '-ta', str), 'Original author of the topic, that will be mentioned when the dd is sent, they will also be given a 15% boost for 6 hours'),
             (('--option', '-o', list), 'Option for the poll'),
         ],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['timers']
     )
     async def _dailydebates_insert(self, ctx: Context, *, args: Union[ParseArgs, dict] = None):
         if args is None:
@@ -824,7 +837,8 @@ class Mod(Cog):
         help='remove a topic from the topic list',
         usage='dailydebates remove [topic index]',
         examples=['dailydebates remove 2'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['timers']
     )
     async def dailydebates_remove(self, ctx: Context, index: str = None):
         if index is None:
@@ -857,7 +871,8 @@ class Mod(Cog):
         help='set the time when topics are announced',
         usage='dailydebates set_time [time]',
         examples=['dailydebates set_time 14:00 GMT+1'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['timers']
     )
     async def dailydebates_set_time(self, ctx: Context, *, time_str: str = None):
         if time_str is None:
@@ -894,7 +909,8 @@ class Mod(Cog):
         help=f'set the channel where topics are announced',
         usage='dailydebates set_channel [#set_channel]',
         examples=['dailydebates set_channel #daily-debates'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['timers']
     )
     async def dailydebates_set_channel(self, ctx: Context, channel: discord.TextChannel = None):
         if channel is None:
@@ -912,7 +928,8 @@ class Mod(Cog):
         help=f'set the role that will be @\'d when topics are announced, disable @\'s by setting the role to `None`',
         usage='dailydebates set_role [role]',
         examples=['dailydebates set_role Debater'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['timers']
     )
     async def dailydebates_set_role(self, ctx: Context, *, role: Union[discord.Role, str] = None):
         if role is None:
@@ -936,7 +953,8 @@ class Mod(Cog):
         help=f'Set the poll channel where polls will be sent, disable polls by setting poll channel to `None``',
         usage='dailydebates set_poll_channel [#channel]',
         examples=['dailydebates set_poll_channel #daily_debate_polls'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['timers']
     )
     async def dailydebates_set_poll_channel(self, ctx: Context, channel: Union[discord.TextChannel, str] = None):
         if channel is None:

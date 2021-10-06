@@ -1,17 +1,14 @@
-import discord
-import time
-import hashlib
-import config
 import datetime
+import hashlib
+import time
 import traceback
-import asyncio
-import re
 
-from bson import ObjectId
+import config
+import discord
 from bot import TLDR
-from modules import database, format_time, embed_maker
+from bson import ObjectId
 from discord.ext.commands import Cog, Context
-
+from modules import database, embed_maker, format_time
 
 db = database.get_connection()
 
@@ -22,9 +19,6 @@ class Events(Cog):
 
     @Cog.listener()
     async def on_ready(self):
-        if self.bot.first_ready:
-            return
-
         bot_game = discord.Game(f">help")
         await self.bot.change_presence(activity=bot_game)
 
@@ -55,25 +49,10 @@ class Events(Cog):
                 m.id for m in await guild.fetch_members(limit=None).flatten()
             ]
             leveling_users = db.leveling_users.find({"guild_id": guild.id})
+        if not self.bot.leveling_system:
+            self.bot.left_check.set()
 
-            self.bot.logger.debug(
-                f"Checking {guild.name} [{guild.id}] for left members. Guild members: {len(guild_members)} Leveling Users: {leveling_users.count()}"
-            )
-
-            for user in leveling_users:
-                # if true, user has left the server while the bot was offline
-                if int(user["user_id"]) not in guild_members:
-                    left_member_count += 1
-                    self.transfer_leveling_data(user)
-
-            self.bot.logger.debug(
-                f"{left_member_count - initial_left_members} members left guild."
-            )
-
-        self.bot.left_check.set()
-        self.bot.logger.info(
-            f"Left members have been checked - Total {left_member_count} members left guilds."
-        )
+        self.bot.logger.info(f"{self.bot.user} is ready")
 
     @Cog.listener()
     async def on_command_error(self, ctx: Context, exception: Exception):
@@ -82,12 +61,9 @@ class Events(Cog):
         lines = traceback.format_exception(type(exception), exception, trace, verbosity)
         traceback_text = "".join(lines)
 
-        if ctx.command is None:
-            return
-
         # send error to channel where eval was called
-
-        if ctx.command.name == "eval":
+        if ctx.command and ctx.command.name == "eval":
+            print(exception, traceback_text)
             return await ctx.send(f"```py\n{exception}\n{traceback_text}```")
 
         print(traceback_text)
@@ -104,7 +80,9 @@ class Events(Cog):
 
         embed = await embed_maker.message(
             ctx,
-            author={"name": f"{ctx.command.name} - Command Error"},
+            author={
+                "name": f"{ctx.command.name if ctx.command else 'Unknown'} - Command Error"
+            },
             description=f"```{exception}\n{traceback_text}```",
         )
 
@@ -270,7 +248,7 @@ class Events(Cog):
                         await poll_msg.add_reaction(e)
 
         # give topic author boost if there is a topic author
-        if topic_author:
+        if topic_author and self.bot.leveling_system:
             leveling_member = await self.bot.leveling_system.get_member(
                 int(guild_id), topic_author_id
             )
@@ -310,20 +288,23 @@ class Events(Cog):
         noes = results["👎"]
         abstain = results["😐"]
 
-        who_has_it = "noes" if noes > ayes else "ayes"
-        results_str = (
-            f"**ORDER! ORDER!**\n\n"
-            f"The ayes to the right: **{ayes}**\n"
-            f"The noes to the left: **{noes}**\n"
-            f"Abstentions: **{abstain}**\n\n"
-            f"The **{who_has_it}** have it. The **{who_has_it}** have it. Unlock!"
-        )
+        if ayes != noes:
+            who_has_it = "noes" if noes > ayes else "ayes"
+            results_str = (
+                f"**ORDER! ORDER!**\n\n"
+                f"The ayes to the right: **{ayes}**\n"
+                f"The noes to the left: **{noes}**\n"
+                f"Abstentions: **{abstain}**\n\n"
+                f"The **{who_has_it}** have it. The **{who_has_it}** have it. Unlock!"
+            )
+        else:
+            results_str = "The vote is a tie."
         # send results string in dd poll channel
         return await channel.send(results_str)
 
     @Cog.listener()
     async def on_message_edit(self, before, after):
-        if not self.bot.first_ready:
+        if not self.bot._ready.is_set():
             return
 
         # re run command if command was edited
@@ -514,7 +495,7 @@ class Events(Cog):
     @Cog.listener()
     async def on_guild_role_update(self, before: discord.Role, after: discord.Role):
         # if name has changed, edit database entry
-        if before.name != after.name:
+        if before.name != after.name and self.bot.leveling_system:
             leveling_guild = self.bot.leveling_system.get_guild(before.guild.id)
 
             for branch in leveling_guild.leveling_routes:
@@ -557,38 +538,25 @@ class Events(Cog):
                 }
             )
 
-            leveling_member = await self.bot.leveling_system.get_member(
-                member.guild.id, member.id
-            )
-
-            for branch in leveling_member.guild.leveling_routes:
-                user_role = next(
-                    (
-                        role
-                        for role in branch.roles
-                        if role.name == left_user[f"{branch.name[0]}_role"]
-                    ),
-                    None,
+            if self.bot.leveling_system:
+                leveling_member = await self.bot.leveling_system.get_member(
+                    member.guild.id, member.id
                 )
-                if user_role:
-                    user_role_index = branch.roles.index(user_role)
-                    up_to_role = branch.roles[: user_role_index + 1]
-                    for role in up_to_role:
-                        await leveling_member.add_role(role)
 
-    def transfer_leveling_data(self, leveling_user):
-        db.leveling_users.delete_many(leveling_user)
-        db.left_leveling_users.delete_many(leveling_user)
-        db.left_leveling_users.insert_one(leveling_user)
-
-        data_expires = round(time.time()) + 30 * 24 * 60 * 60  # 30 days
-
-        self.bot.timers.create(
-            guild_id=leveling_user["guild_id"],
-            expires=data_expires,
-            event="leveling_data_expires",
-            extras={"user_id": leveling_user["user_id"]},
-        )
+                for branch in leveling_member.guild.leveling_routes:
+                    user_role = next(
+                        (
+                            role
+                            for role in branch.roles
+                            if role.name == left_user[f"{branch.name[0]}_role"]
+                        ),
+                        None,
+                    )
+                    if user_role:
+                        user_role_index = branch.roles.index(user_role)
+                        up_to_role = branch.roles[: user_role_index + 1]
+                        for role in up_to_role:
+                            await leveling_member.add_role(role)
 
     @Cog.listener()
     async def on_member_remove(self, member: discord.Member):
@@ -599,7 +567,7 @@ class Events(Cog):
         if not leveling_user:
             return
 
-        self.transfer_leveling_data(leveling_user)
+        self.bot.leveling_system.transfer_leveling_data(leveling_user)
 
     @Cog.listener()
     async def on_leveling_data_expires_timer_over(self, timer: dict):

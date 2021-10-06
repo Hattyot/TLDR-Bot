@@ -4,7 +4,9 @@ import asyncio
 import logging
 import os
 import sys
+import requests
 
+from io import BytesIO
 from logging import handlers
 from typing import Tuple, Union, Optional
 from modules import embed_maker, database, commands
@@ -122,6 +124,30 @@ def id_match(identifier: str, extra: str) -> re.Match:
     return id_regex.match(identifier) or additional_regex.match(identifier)
 
 
+def get_text_channel(ctx: Context, argument: str = '') -> Optional[discord.TextChannel]:
+    match = id_match(argument, r'<#([0-9]+)>$')
+    if match is None:
+        # not a mention
+        if ctx.guild:
+            result = discord.utils.get(ctx.guild.text_channels, name=argument)
+        else:
+            def check(c):
+                return isinstance(c, discord.TextChannel) and c.name == argument
+
+            result = discord.utils.find(check, ctx.bot.get_all_channels())
+    else:
+        channel_id = int(match.group(1))
+        if ctx.guild:
+            result = ctx.guild.get_channel(channel_id)
+        else:
+            result = None
+
+    if not isinstance(result, discord.TextChannel):
+        result = None
+
+    return result
+
+
 def get_custom_emote(ctx: Context, emote: str) -> Optional[discord.Emoji]:
     """
     Look up custom emote by id or by name
@@ -186,7 +212,7 @@ async def get_guild_role(guild: discord.Guild, role_identifier: str) -> Optional
     return role
 
 
-async def get_member_from_string(ctx: Context, string: str) -> Tuple[Optional[discord.Member], str]:
+async def get_member_from_string(ctx: Optional[Context], string: str, *, guild: discord.Guild = None) -> Tuple[Optional[discord.Member], str]:
     """
     Get member from the first part of the string and return the remaining string.
 
@@ -196,33 +222,49 @@ async def get_member_from_string(ctx: Context, string: str) -> Tuple[Optional[di
         Context.
     string: :class:`str`
         String where the member will be searched from.
+    guild: :class:`discord.Guild`,
+        Optional guild paramater that can be used to use the simplified get_guild_member function
 
     Returns
     -------
     Tuple[Optional[:class:`discord.Member`], :class:`str`]
         Member and remaining string if member is found or `None` and string.
     """
-    # check if source is member mention
-    if ctx.message.mentions:
-        return ctx.message.mentions[0], ' '.join(string.split()[1:])
+    if ctx:
+        # check if source is member mention
+        if ctx.message.mentions:
+            return ctx.message.mentions[0], ' '.join(string.split()[1:])
 
     member_name = ""
     previous_result = None
+
+    if guild:
+        ctx = guild
+        member_func = get_guild_member
+    else:
+        member_func = get_member
+
     for part in string.split():
-        member_match = await get_member(ctx, f'{member_name} {part}'.strip(), multi=False, return_message=False)
+        member_match = await member_func(ctx, f'{member_name} {part}'.strip(), multi=False, return_message=False)
         if member_match is None:
             # if both member and previous result are None, nothing can be found from the string, return None and the string
             if previous_result is None:
                 return None, string
             # if member is None, but previous result is a list, return Normal get_member call and allow user to choose member
             elif type(previous_result) == list:
-                return await get_member(ctx, f'{member_name}'.strip()), string.replace(f'{member_name}'.strip(), '').strip()
+                return await member_func(ctx, f'{member_name}'.strip()), string.replace(f'{member_name}'.strip(), '').strip()
             elif type(previous_result) == discord.Member:
                 return previous_result, string.replace(f'{member_name}'.strip(), '').strip()
         else:
             # update variables
             previous_result = member_match
             member_name = f'{member_name} {part}'.strip()
+
+    if len(string.split()) == 1 and type(previous_result) != discord.Member:
+        if type(previous_result) == list:
+            return await get_member(ctx, f'{member_name}'.strip()), string.replace(f'{member_name}'.strip(), '').strip()
+        elif type(previous_result) == discord.Member:
+            return previous_result, string.replace(f'{member_name}'.strip(), '').strip()
 
     return previous_result, string.replace(f'{member_name}'.strip(), '').strip()
 
@@ -254,6 +296,78 @@ async def get_member_by_id(guild: discord.Guild, member_id: int) -> Optional[dis
     return member
 
 
+async def get_guild_member(guild: discord.Guild, source, **_) -> Optional[Union[discord.Member, discord.Message, list]]:
+    """
+    Clean version of get member which only needs guild. It was easier to do this rather than start upgrading get_member.
+
+    Parameters
+    ----------------
+    guild: :class:`discord.Guild`
+        Context.
+    source: :class:`str`
+        Identifier to which members are matched, can be id or name.
+
+    Returns
+    -------
+    Optional[Union[:class:`discord.Member`, :class`discord.Message`, :class:`list`]]:
+        discord.Member if member is found else None.
+    """
+    if type(source) == int:
+        source = str(source)
+
+    # Check if source is member id
+    if source.isdigit() and len(source) > 9:
+        member = guild.get_member(int(source))
+
+        # if member isn't found by get, maybe they aren't in the cache, fetch them by making an api call
+        if not member:
+            try:
+                # if member hasnt been cached yet, fetching them should work, if member is inaccessible, it will return None
+                member = await guild.fetch_member(int(source))
+                if member is None:
+                    return
+            except:
+                return
+
+        if member:
+            return member
+
+    # if source length is less than 3, don't bother searching, too many matches will come
+    if len(source) < 3:
+        return
+
+    # checks first for a direct name match
+    members = list(
+        filter(
+            lambda m: m.name.lower() == source.lower() or  # username match
+                      m.display_name.lower() == source.lower() or  # nickname match (if user doesnt have a nickname, it'll match the name again)
+                      str(m).lower() == source.lower(),  # name and discriminator match
+            guild.members
+        )
+    )
+
+    # if can't find direct name match, check for a match with regex
+    if not members:
+        # checks for regex match
+        special_chars_map = {i: '\\' + chr(i) for i in b'()[]{}?*+-|^$\\.&~#'}
+        safe_source = source.translate(special_chars_map)
+
+        members = list(
+            filter(
+                lambda m: re.findall(fr'({safe_source.lower()})', str(m).lower()) or  # regex match name and discriminator
+                          re.findall(fr'({safe_source.lower()})', m.display_name.lower()),  # regex match nickname
+                guild.members
+            )
+        )
+
+        if not members:
+            return
+
+    # only one match, return member
+    if len(members) == 1:
+        return members[0]
+
+
 async def get_member(ctx: Context, source, *, multi: bool = True, return_message: bool = True) -> Optional[Union[discord.Member, discord.Message, list]]:
     """
     Get member from given source. Source could be id or name.
@@ -279,7 +393,7 @@ async def get_member(ctx: Context, source, *, multi: bool = True, return_message
         List if multiple members are found and multi is False.
     """
     # just in case source is empty
-    if not source:
+    if not source and return_message:
         return await embed_maker.error(ctx, 'Input is empty') if return_message else None
 
     if type(source) == int:
@@ -346,7 +460,7 @@ async def get_member(ctx: Context, source, *, multi: bool = True, return_message
     # only one match, return member
     if len(members) == 1:
         return members[0]
-    elif not multi:
+    elif not multi or not return_message:
         return members
 
     # send embed containing member matches and let member choose which one they meant
@@ -381,13 +495,13 @@ async def get_member(ctx: Context, source, *, multi: bool = True, return_message
         if index.isdigit() and len(members) >= int(index) - 1 >= 0:
             return members[int(index) - 1]
         elif not index.isdigit():
-            return await embed_maker.error(ctx, 'Input is not a number')
+            return await embed_maker.error(ctx, 'Input is not a number') if return_message else None
         elif int(index) - 1 > len(members) or int(index) - 1 < 0:
-            return await embed_maker.error(ctx, 'Input number out of range')
+            return await embed_maker.error(ctx, 'Input number out of range') if return_message else None
 
     except asyncio.TimeoutError:
         await users_embed_message.delete()
-        return await embed_maker.error(ctx, 'Timeout')
+        return await embed_maker.error(ctx, 'Timeout') if return_message else None
 
 
 def get_logger(name: str = 'TLDR-Bot-log'):
@@ -428,3 +542,77 @@ def get_logger(name: str = 'TLDR-Bot-log'):
 
     adapter = logging.LoggerAdapter(logger, extra={'session': 2})
     return adapter
+
+
+def replace_mentions(guild: discord.Guild, string) -> str:
+    # replace mentions in values with actual names
+    mentions = re.findall(r'(<(@|@&|@!|#)\d+>)', string)
+    for mention in mentions:
+        # get type, ie. @, @&, @! or #
+        mention_type = mention[1]
+        # get id from find
+        mention_id = re.findall(r'(\d+)', mention[0])[0]
+
+        # turn type into iterable
+        iterable_switch = {
+            '@': guild.members,
+            '@!': guild.members,
+            '@&': guild.roles,
+            '#': guild.channels
+        }
+        iterable = iterable_switch.get(mention_type, None)
+        if not iterable:
+            continue
+
+        # get object from id
+        mention_object = discord.utils.find(lambda o: o.id == int(mention_id), iterable)
+        # if object actually exists replace mention in string
+        if mention_object:
+            string = string.replace(f'{mention[0]}', f'{mention_type[0]}{mention_object.name}')
+
+    return string
+
+
+def embed_message_to_text(embed):
+    # get either title or author
+    title = ''
+    if embed.title:
+        title = embed.title.name if type(embed.title) != str else embed.title
+    elif embed.author:
+        title = embed.author.name if type(embed.author) != str else embed.author
+    # format description
+    description = ('\n' if title else '') + embed.description if embed.description else ''
+
+    # convert fields to text
+    fields = ""
+    for field in embed.fields:
+        if fields or description:
+            fields += '\n'
+
+        fields += f'{field.name}\n{field.value}'
+
+    # convert values to a multi line message
+    text = f"{title}" \
+           f"{description}" \
+           f"{fields}"
+
+    return text
+
+
+async def async_file_downloader(urls: list[str], headers: dict = None) -> list[BytesIO]:
+    async def fetch_file(index: int, files: list, url: str):
+        response = requests.get(url, headers=headers)
+        file = BytesIO(response.content)
+        file.seek(0)
+        files[index] = file
+
+    futures = []
+    files = [None] * len(urls)
+    for i, url in enumerate(urls):
+        future = asyncio.create_task(fetch_file(i, files, url))
+        futures.append(future)
+
+    if futures:
+        await asyncio.gather(*futures)
+
+    return [file for file in files if file]

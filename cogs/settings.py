@@ -87,6 +87,7 @@ class Settings(Cog):
         usage="invite_logger_channel [#channel]",
         examples=["invite_logger_channel #bots"],
         cls=commands.Command,
+        module_dependency=['leveling_system', 'invite_logger'],
     )
     async def invite_logger_channel(
         self, ctx: Context, channel: discord.TextChannel = None
@@ -144,6 +145,7 @@ class Settings(Cog):
         usage="level_up_channel [#channel]",
         examples=["level_up_channel #bots"],
         cls=commands.Command,
+        module_dependency=['leveling_system']
     )
     async def level_up_channel(self, ctx: Context, channel: discord.TextChannel = None):
         leveling_guild = self.bot.leveling_system.get_guild(ctx.guild.id)

@@ -1191,11 +1191,60 @@ class LevelingSystem:
         # list of leveling guilds
         self.guilds = []
         self.bot.add_listener(self.on_message, 'on_message')
+        self.bot.add_listener(self.on_ready, 'on_ready')
         self.bot.logger.info("LevelingSystem module has been initiated")
+
+    async def on_ready(self):
+        await self.initialise_guilds()
+        await self.check_left_members()
+
+    async def check_left_members(self):
+        self.bot.logger.info(f"Checking Guilds for left members.")
+        left_member_count = 0
+        # check if any users have left while the bot was offline
+        for guild in self.bot.guilds:
+            initial_left_members = left_member_count
+            guild_members = [
+                m.id for m in await guild.fetch_members(limit=None).flatten()
+            ]
+            leveling_users = db.leveling_users.find({"guild_id": guild.id})
+
+            self.bot.logger.debug(
+                f"Checking {guild.name} [{guild.id}] for left members. Guild members: {len(guild_members)} Leveling Users: {leveling_users.count()}"
+            )
+
+            for user in leveling_users:
+                # if true, user has left the server while the bot was offline
+                if int(user["user_id"]) not in guild_members:
+                    left_member_count += 1
+                    self.transfer_leveling_data(user)
+
+            self.bot.logger.debug(
+                f"{left_member_count - initial_left_members} members left guild."
+            )
+
+        self.bot.left_check.set()
+        self.bot.logger.info(
+            f"Left members have been checked - Total {left_member_count} members left guilds."
+        )
+
+    def transfer_leveling_data(self, leveling_user: dict):
+        db.leveling_users.delete_many(leveling_user)
+        db.left_leveling_users.delete_many(leveling_user)
+        db.left_leveling_users.insert_one(leveling_user)
+
+        data_expires = round(time.time()) + 30 * 24 * 60 * 60  # 30 days
+
+        self.bot.timers.create(
+            guild_id=leveling_user["guild_id"],
+            expires=data_expires,
+            event="leveling_data_expires",
+            extras={"user_id": leveling_user["user_id"]},
+        )
 
     async def on_message(self, message: discord.Message):
         """Function called on every message to level up members."""
-        if not self.bot.first_ready:
+        if not self.bot._ready.is_set():
             return
 
         if message.author.bot or not message.guild or message.content.startswith(config.PREFIX):
@@ -1204,7 +1253,7 @@ class LevelingSystem:
         leveling_cog = self.bot.get_cog("Leveling")
         await leveling_cog.process_message(message)
 
-    def initialise_guilds(self):
+    async def initialise_guilds(self):
         """Function called in :func:`cogs.events.on_ready` to initialise all the guilds and cache them."""
         self.bot.logger.info(
             f"Initialising {len(self.bot.guilds)} guilds as LevelingGuilds."

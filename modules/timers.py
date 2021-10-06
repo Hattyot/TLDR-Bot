@@ -1,12 +1,69 @@
 import asyncio
 import time
 
+from discord.ext.commands import Bot
 from bson import ObjectId
 from modules import database
 
 db = database.get_connection()
 
-# TODO: create separate class for timer.
+
+class Loop:
+    def __init__(self, coro, seconds, minutes, hours):
+        self.coro = coro
+        self._injected = None
+
+        self.seconds = seconds
+        self.minutes = minutes
+        self.hours = hours
+        self.time = seconds + (minutes * 60) + (hours * 60 * 60)
+
+        self.started = asyncio.Event()
+        self.loop = asyncio.get_event_loop()
+        self.loop.create_task(self.run_loop())
+
+    def start(self):
+        self.started.set()
+
+    def stop(self):
+        self.started.clear()
+
+    def __get__(self, obj, objtype):
+        if obj is None:
+            return self
+
+        self._injected = obj
+        return self
+
+    async def run_loop(self):
+        print(self.started.is_set())
+        await self.started.wait()
+        while True:
+            await asyncio.sleep(self.time)
+
+            # if loop is stopped return to waiting
+            if not self.started.is_set() or not self.loop.is_running():
+                return await self.run_loop()
+
+            try:
+                await self.coro(self._injected)
+            except Exception as e:
+                if hasattr(self._injected, 'bot'):
+                    await self._injected.bot.on_event_error(e, self.coro.__name__, loop=True)
+                if isinstance(self._injected, Bot):
+                    # checking if isinstace bot, cause can't import TLDR due to circular import
+                    await self._injected.on_event_error(e, self.coro.__name__, loop=True)
+
+
+def loop(*, seconds=0, minutes=0, hours=0):
+    def decorator(func):
+        kwargs = {
+            'seconds': seconds,
+            'minutes': minutes,
+            'hours': hours,
+        }
+        return Loop(func, **kwargs)
+    return decorator
 
 
 class Timers:
@@ -22,7 +79,21 @@ class Timers:
 
     def __init__(self, bot):
         self.bot = bot
+        self.bot.add_listener(self.on_ready, 'on_ready')
         self.bot.logger.info('Timers module has been initiated')
+
+    async def on_ready(self):
+        await self.run_old()
+
+    async def run_loop(self, loop: Loop):
+        await loop.started.wait()
+        while True:
+            # if loop is stopped return
+            if not loop.started.is_set():
+                return self.run_loop(loop)
+
+            await asyncio.sleep(loop.time)
+            await loop.coro()
 
     async def run_old(self) -> None:
         """Runs all the timers that were cut short, that are still in the database."""

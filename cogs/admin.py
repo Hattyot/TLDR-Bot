@@ -8,7 +8,7 @@ import functools
 from io import StringIO
 from discord.ext.commands import Cog, command, Context, TextChannelConverter, ChannelNotFound, group
 from modules import commands, database, embed_maker, reaction_menus
-from modules.utils import ParseArgs, get_custom_emote, get_guild_role
+from modules.utils import ParseArgs, get_custom_emote, get_guild_role, get_member, get_text_channel, replace_mentions, embed_message_to_text
 from typing import Union
 
 db = database.get_connection()
@@ -17,6 +17,262 @@ db = database.get_connection()
 class Admin(Cog):
     def __init__(self, bot):
         self.bot = bot
+
+    @command(
+        invoke_without_command=True,
+        help='Command for managing the slack bridge system.',
+        usage='slack (sub command) (args)',
+        examples=[],
+        cls=commands.Group
+    )
+    async def slack(self, ctx: Context):
+        if ctx.subcommand_passed is None:
+            return await embed_maker.message(
+                ctx,
+                author={'name': 'Slack Bridge'},
+                description=f'To view info about channels type:\n`{ctx.prefix}slack channel`\n'
+                            f'To view info about members type:\n`{ctx.prefix}slack member`',
+                send=True
+            )
+
+    @slack.command(
+        invoke_without_command=True,
+        name='channel',
+        help='Manage slack channels connected with the slack bridge system.',
+        usage='slack channel (sub command) (args)',
+        examples=[],
+        cls=commands.Group
+    )
+    async def slack_channel(self, ctx: Context):
+        embed = await embed_maker.message(
+            ctx,
+            author={'name': 'Slack Bridge Channels'},
+            description=f'To view more info about channels type:\n`{ctx.prefix}slack channel info [channel id]`'
+        )
+        unbridge_value = ''
+        bridged_value = ''
+        for team in self.bot.slack_bridge.teams:
+            unbridged_channels = ' | '.join(f"`{channel.id}`" for channel in team.channels if not channel.discord_channel)
+            bridged_channels = '\n'.join(f"`{channel.id}` - [<#{channel.discord_channel.id}>]" for channel in team.channels if channel.discord_channel)
+            unbridge_value += (f'\n**{team.name}:** ' + unbridged_channels) if unbridged_channels else ''
+            bridged_value += (f'\n**{team.name}:**\n' + bridged_channels) if bridged_channels else ''
+
+        embed.add_field(
+            name='>Unbridged slack channels',
+            value=unbridge_value if unbridge_value else 'None',
+            inline=False
+        )
+        if bridged_value:
+            embed.add_field(
+                name='>Bridged channels',
+                value=bridged_value if bridged_value else 'None',
+                inline=False
+            )
+        return await ctx.send(embed=embed)
+
+    @slack_channel.command(
+        invoke_without_command=True,
+        name='info',
+        help='View info available on a slack channels.',
+        usage='slack channel info [slack channel id]',
+        examples=[f'slack channel info C026XRL8K2S'],
+        cls=commands.Command
+    )
+    async def slack_channel_info(self, ctx: Context, channel_id: str = None):
+        if channel_id is None:
+            return await embed_maker.command_error(ctx)
+
+        slack_channel = self.bot.slack_bridge.get_channel(channel_id)
+        if not slack_channel:
+            return await embed_maker.error(ctx, f'Unable to find slack channel by the id [{channel_id}]')
+
+        description = f"**Slack ID:** {slack_channel.id}\n" \
+                      f"**Slack Team ID**: {slack_channel.team_id}\n" \
+                      f"**Slack Name:** {slack_channel.slack_name}\n"
+
+        if slack_channel.discord_channel:
+            description += f'**Discord ID:** {slack_channel.discord_channel.id}\n' \
+                           f'**Discord Name:** {slack_channel.name}\n' \
+                           f'**Discord Mention:** {slack_channel.discord_channel.mention}\n'
+
+        return await embed_maker.message(
+            ctx,
+            author={'name': 'Slack Bridge Channels'},
+            description=description,
+            send=True
+        )
+
+    @slack_channel.command(
+        invoke_without_command=True,
+        name='bridge',
+        help='Set the bridge of a slack channel. Bridge can be unset by typing "None" instead of [discord channel]',
+        usage='slack channel bridge [slack channel id] [discord channel]',
+        examples=[
+            f'slack channel bridge U0271HF3ZQV #slack',
+            f'slack channel bridge U0271HF3ZQV 856815506325897216'
+        ],
+        cls=commands.Command
+    )
+    async def slack_channel_bridge(self, ctx: Context, slack_channel_id: str = None, discord_channel: str = None):
+        if slack_channel_id is None:
+            return await embed_maker.command_error(ctx)
+
+        slack_channel = self.bot.slack_bridge.get_channel(slack_channel_id)
+        if slack_channel is None:
+            return await embed_maker.error(ctx, f'Unable to find slack channel via id [{slack_channel_id}]')
+
+        if discord_channel.lower() == "none":
+            slack_channel.unset_discord_channel()
+            return await embed_maker.message(
+                ctx,
+                description=f'Slack channel [{slack_channel_id}] no longer has a discord bridge.',
+                colour='green',
+                send=True
+            )
+
+        if slack_channel.discord_channel:
+            return await embed_maker.error(ctx, f'Slack channel [{slack_channel_id}] is already assigned to discord channel [{slack_channel.discord_channel.mention}]')
+
+        if discord_channel is None:
+            return await embed_maker.command_error(ctx, '[discord channel]')
+
+        discord_channel = get_text_channel(ctx, discord_channel)
+        if discord_channel is None:
+            return await embed_maker.error(ctx, 'Unable to find discord channel')
+
+        taken = self.bot.slack_bridge.get_channel(discord_id=discord_channel.id)
+        if taken:
+            return await embed_maker.error(ctx, f'Discord channel [{discord_channel.mention}] is already assigned to Slack channel [{taken.id}]')
+
+        slack_channel.set_discord_channel(discord_channel)
+        return await embed_maker.message(
+            ctx,
+            description=f'Slack channel [{slack_channel_id}] has been set up with a bridge to [{discord_channel.mention}]',
+            colour='green',
+            send=True
+        )
+
+    @slack.command(
+        invoke_without_command=True,
+        name='member',
+        help='Manage members connected with the slack bridge system.',
+        usage='slack member (sub command) (args)',
+        examples=[],
+        cls=commands.Group
+    )
+    async def slack_member(self, ctx: Context):
+        embed = await embed_maker.message(
+            ctx,
+            author={'name': 'Slack Bridge Members'},
+        )
+        alias = lambda slack_member: f'<@{slack_member.discord_member.id}>' if slack_member.discord_member else slack_member.name
+        unaliased_value = ''
+        aliased_value = ''
+        for team in self.bot.slack_bridge.teams:
+            unaliased_members = ' | '.join(f"`{member.id}`" for member in team.members if not member.discord_member and not member.discord_name)
+            aliased_members = '\n'.join(f"`{member.id}` - [{alias(member)}]" for member in team.members if member.discord_member or member.discord_name)
+            unaliased_value += (f'\n**{team.name}:**' + unaliased_members) if unaliased_members else ''
+            aliased_value += (f'\n**{team.name}:**\n' + aliased_members) if aliased_members else ''
+
+        embed.add_field(
+            name='>Members Without Aliases',
+            value=unaliased_value if unaliased_value else 'None',
+            inline=False
+        )
+
+        if aliased_value:
+            embed.add_field(
+                name='>Member with aliases',
+                value=aliased_value,
+                inline=False
+            )
+
+        return await ctx.send(embed=embed)
+
+    @slack_member.command(
+        invoke_without_command=True,
+        name='info',
+        help='View info available on a slack member.',
+        usage='slack member info [slack member id]',
+        examples=[f'slack member info U0271HF3ZQV'],
+        cls=commands.Command
+    )
+    async def slack_member_info(self, ctx: Context, member_id: str = None):
+        if member_id is None:
+            return await embed_maker.command_error(ctx)
+
+        slack_member = self.bot.slack_bridge.get_user(member_id)
+        if not slack_member:
+            return await embed_maker.error(ctx, f'Unable to find slack member by the id [{member_id}]')
+
+        description = f"**Slack ID:** {slack_member.id}\n" \
+                      f"**Slack Name:** {slack_member.slack_name}\n"
+
+        if slack_member.discord_member or slack_member.discord_name:
+            description += f'**Discord ID:** {slack_member.discord_member.id if slack_member.discord_member else "None"}\n' \
+                           f'**Discord Name:** {slack_member.name}\n' \
+                           f'**Discord Mention:** {slack_member.discord_member.mention if slack_member.discord_member else "None"}\n'
+
+        return await embed_maker.message(
+            ctx,
+            author={'name': slack_member.id},
+            description=description,
+            send=True
+        )
+
+    @slack_member.command(
+        invoke_without_command=True,
+        name='alias',
+        help='Set the alias of a slack member, If a slack user doesnt have a discord account, just a name can be assigned. '
+             'Alias can be unset by typing "None" instead of [discord member]',
+        usage='slack member alias [slack member id] [discord member]',
+        examples=[
+            f'slack member alias U0271HF3ZQV @Hattyot',
+            f'slack member alias U0271HF3ZQV 436228721033216009'
+        ],
+        cls=commands.Command
+    )
+    async def slack_member_alias(self, ctx: Context, slack_member_id: str = None, *, discord_member_identifier: str = None):
+        if slack_member_id is None:
+            return await embed_maker.command_error(ctx)
+
+        slack_member = self.bot.slack_bridge.get_user(slack_member_id)
+        if slack_member is None:
+            return await embed_maker.error(ctx, f'Unable to find slack member via id [{slack_member_id}]')
+
+        if discord_member_identifier is None:
+            return await embed_maker.command_error(ctx, '[discord member]')
+
+        if discord_member_identifier.lower() == "none":
+            slack_member.unset_discord_member()
+            return await embed_maker.message(
+                ctx,
+                description=f'Slack member [{slack_member_id}] no longer has a discord alias.',
+                colour='green',
+                send=True
+            )
+
+        # member not mentioned and id not used, assigning just a name to user
+        if not ctx.message.mentions and not discord_member_identifier.isdigit():
+            slack_member.set_discord_name(discord_member_identifier)
+            alias = discord_member_identifier
+        else:
+            discord_member = await get_member(ctx, discord_member_identifier)
+            if type(discord_member) == discord.Message:
+                return
+
+            taken = self.bot.slack_bridge.get_user(discord_id=discord_member.id)
+            if taken:
+                return await embed_maker.error(ctx, f'Member [{discord_member.mention}] is already linked with [{taken.id}]')
+            slack_member.set_discord_member(discord_member)
+            alias = discord_member.mention
+
+        return await embed_maker.message(
+            ctx,
+            description=f'Slack member [{slack_member_id}] has been set up with the alias [{alias}]',
+            colour='green',
+            send=True
+        )
 
     @command(
         invoke_without_command=True,
@@ -86,7 +342,8 @@ class Admin(Cog):
         help='Enables or disables giving non-patreon users the member role when they get the citizen role',
         usage='automember',
         examples=['automember'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['leveling_system']
     )
     async def auto_member(self, ctx: Context):
         new_automember = db.get_automember(ctx.guild.id)
@@ -255,7 +512,8 @@ class Admin(Cog):
         help='Archive a ticket channel. Every message will be recorded and put in a google doc',
         usage='archive_channel',
         examples=['archive_channel'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['google_drive']
     )
     async def archive_channel(self, ctx: Context):
         # ask the user if they actually want to start the process of archiving a channel
@@ -307,63 +565,6 @@ class Admin(Cog):
         # send file containing archive
         return await ctx.send(file=discord.File(StringIO(channel_history_string), filename='archive.txt'))
 
-    @staticmethod
-    def embed_message_to_text(message: discord.Message):
-        embed = message.embeds[0]
-
-        # get either title or author
-        title = ''
-        if embed.title:
-            title = embed.title.name if type(embed.title) != str else embed.title
-        elif embed.author:
-            title = embed.author.name if type(embed.author) != str else embed.author
-        # format description
-        description = ('\n' if title else '') + embed.description if embed.description else ''
-
-        # convert fields to text
-        fields = ""
-        for field in embed.fields:
-            if fields or description:
-                fields += '\n'
-
-            fields += f'{field.name}\n{field.value}'
-
-        # convert values to a multi line message
-        text = f"{title}" \
-               f"{description}" \
-               f"{fields}"
-
-        return text
-
-    @staticmethod
-    def replace_mentions(guild: discord.Guild, string):
-        # replace mentions in values with actual names
-        mentions = re.findall(r'(<(@|@&|@!|#)\d+>)', string)
-        for mention in mentions:
-            # get type, ie. @, @&, @! or #
-            mention_type = mention[1]
-            # get id from find
-            mention_id = re.findall(r'(\d+)', mention[0])[0]
-
-            # turn type into iterable
-            iterable_switch = {
-                '@': guild.members,
-                '@!': guild.members,
-                '@&': guild.roles,
-                '#': guild.channels
-            }
-            iterable = iterable_switch.get(mention_type, None)
-            if not iterable:
-                continue
-
-            # get object from id
-            mention_object = discord.utils.find(lambda o: o.id == int(mention_id), iterable)
-            # if object actually exists replace mention in string
-            if mention_object:
-                string = string.replace(f'{mention[0]}', mention_object.name)
-
-        return string
-
     async def history_into_string(self, guild: discord.Guild, history: list):
         history_string = ''
         for i, message in enumerate(history):
@@ -378,7 +579,7 @@ class Admin(Cog):
 
             # if message has embed, convert the embed to text and add it to channel_history_string
             if message.embeds:
-                history_string += f'\n"{self.embed_message_to_text(message)}"\n'
+                history_string += f'\n"{embed_message_to_text(message.embeds[0])}"\n'
 
             # if message has attachments add them to channel_history_string
             if message.attachments:
@@ -393,7 +594,7 @@ class Admin(Cog):
             history_string += '\n'
 
         # convert mentions like "<@93824009823094832098>" into names
-        history_string = self.replace_mentions(guild, history_string)
+        history_string = replace_mentions(guild, history_string)
         return history_string
 
     async def construct_cc_embed(self, ctx: Context, custom_commands: dict, max_page_num: int, page_size_limit: int, *, page: int):
@@ -423,7 +624,8 @@ class Admin(Cog):
         usage='customcommands (sub command) (args)',
         examples=['customcommands', 'customcommands 1'],
         aliases=['cc'],
-        cls=commands.Group
+        cls=commands.Group,
+        module_dependency=['reaction_menus']
     )
     async def customcommands(self, ctx: Context, index: Union[int, str] = None):
         if not ctx.subcommand_passed:

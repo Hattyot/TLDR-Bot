@@ -62,7 +62,8 @@ class Leveling(Cog):
         usage='rep [member] [reason for the rep]',
         examples=['rep @Hattyot for being an excellent example in this text'],
         cls=commands.Command,
-        aliases=['reputation']
+        aliases=['reputation'],
+        module_dependency=['timers', 'leveling_system']
     )
     async def rep(self, ctx: Context, *, member_reason: str = None):
         # check if user has been in server for more than 7 days
@@ -172,8 +173,8 @@ class Leveling(Cog):
             usage='ranks (branch) (sub command) (args)',
             examples=['ranks', 'ranks honours'],
         ),
-
-        cls=commands.Group
+        cls=commands.Group,
+        module_dependency=['leveling_system']
     )
     async def ranks(self, ctx: Context, branch: str = 'parliamentary'):
         if ctx.subcommand_passed is None and branch:
@@ -207,7 +208,8 @@ class Leveling(Cog):
         help='Add a role to parliamentary or honours route',
         usage='ranks add [branch] [role name]',
         examples=['ranks add honours Pro', 'ranks add honours Knight 2'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['leveling_system']
     )
     async def ranks_add(self, ctx: Context, branch: str = None, *, role_name: str = None):
         if branch is None:
@@ -244,7 +246,8 @@ class Leveling(Cog):
         help='Remove a role from the list of parliamentary or honours roles',
         usage='ranks remove [branch] [role name]',
         examples=['ranks remove honours Knight'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['leveling_system']
     )
     async def ranks_remove(self, ctx: Context, branch: str = None, *, role: str):
         if not branch or type(branch) == int:
@@ -283,7 +286,8 @@ class Leveling(Cog):
             examples=['perks', 'perks Party Member'],
         ),
 
-        cls=commands.Group
+        cls=commands.Group,
+        module_dependency=['leveling_system']
     )
     async def perks(self, ctx: Context, *, role: str = None):
         if ctx.subcommand_passed is None:
@@ -387,7 +391,8 @@ class Leveling(Cog):
             (('--role', '-r', str), 'The name of the role you want to set the perks for'),
             (('--perk', '-p', list), 'Perk for the role')
         ],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['leveling_system']
     )
     async def perks_set(self, ctx: Context, *, args: Union[ParseArgs, dict] = None):
         return await self.modify_perks(ctx, 'set', args, 'New perks have been set for role `{role.name}`')
@@ -401,7 +406,8 @@ class Leveling(Cog):
             (('--role', '-r', str), 'The name of the role you want to add the perks to'),
             (('--perk', '-p', list), 'Perk for the role')
         ],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['leveling_system']
     )
     async def perks_add(self, ctx: Context, *, args: Union[ParseArgs, dict] = None):
         return await self.modify_perks(ctx, 'add', args, 'New perks have been added for role `{role.name}`')
@@ -418,7 +424,8 @@ class Leveling(Cog):
             (('--role', '-r', str), 'The name of the role you want to remove perks from'),
             (('--perk', '-p', list), 'Index of the perk you want to remove, can be seen by doing >perks [role]')
         ],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['leveling_system']
     )
     async def perks_remove(self, ctx: Context, *, args: Union[ParseArgs, dict] = None):
         return await self.modify_perks(ctx, 'remove', args, 'Perks have been removed from role `{role.name}`')
@@ -434,7 +441,8 @@ class Leveling(Cog):
             usage='honours_channel (action - <add/remove>) [#channel]',
             examples=['honours_channels', 'honours_channels add #court', 'honours_channels remove #Mods'],
         ),
-        cls=commands.Group
+        cls=commands.Group,
+        module_dependency=['leveling_system']
     )
     async def honours_channels(self, ctx: Context):
         if ctx.subcommand_passed is None:
@@ -449,7 +457,8 @@ class Leveling(Cog):
         help='Add an honours channel',
         usage='honours_channels add [#channel]',
         examples=['honours_channels add #Tech-Lobby'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['leveling_system']
     )
     async def honours_channels_add(self, ctx: Context, channel=None):
         if channel is None:
@@ -472,7 +481,8 @@ class Leveling(Cog):
         help='Remove an honours channel',
         usage='honours_channels remove [#channel]',
         examples=['honours_channels remove #Tech-Lobby'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['leveling_system']
     )
     async def honours_channels_remove(self, ctx: Context, channel=None):
         if channel is None:
@@ -494,7 +504,8 @@ class Leveling(Cog):
         help='See how many messages you need to send to level up and rank up or see how many messages until you reach a level (dont forget about the 60s cooldown)',
         usage='mlu (level)',
         examples=['mlu', 'mlu 60'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['leveling_system']
     )
     async def mlu(self, ctx: Context, level: Union[float, str] = None):
         # incase somebody typed something that isnt a level
@@ -588,7 +599,8 @@ class Leveling(Cog):
         usage='leaderboard (branch)',
         aliases=['lb'],
         examples=['leaderboard parliamentary', 'lb honours'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['reaction_menus', 'leveling_system']
     )
     async def leaderboard(self, ctx: Context, branch: str = 'parliamentary', page: int = 1):
         leveling_guild = self.bot.leveling_system.get_guild(ctx.guild.id)
@@ -701,7 +713,8 @@ class Leveling(Cog):
         help='Shows your (or someone else\'s) rank and level, add -v too see all the data',
         usage='rank (member) (-v)',
         examples=['rank', 'rank @Hattyot', 'rank Hattyot -v'],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['leveling_system']
     )
     async def rank(self, ctx: Context, *, user_input: str = ''):
         verbose = bool(re.findall(r'(?:\s|^)(-v)(?:\s|$)', user_input))
@@ -773,7 +786,8 @@ class Leveling(Cog):
         help='Toggle the different leveling settings.',
         usage='settings (setting)',
         examples=["settings @me", "settings rep@"],
-        cls=commands.Command
+        cls=commands.Command,
+        module_dependency=['leveling_system']
     )
     async def settings(self, ctx: Context, *, setting: str = None):
         embed = await embed_maker.message(ctx, description=f"To toggle a setting, type `{ctx.prefix}settings [setting]`", author={'name': 'Settings'})
