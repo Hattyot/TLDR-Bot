@@ -52,6 +52,11 @@ class poll_election(Cog):
             params.append("company="+company)
         url = "https://opinionbee.uk/json/v1.0/companies?"+ ",".join(params)
         response = requests.get(url, headers={"Accept": "text/plain"})
+        types = response.json()
+        embed = discord.Embed(title="Companies Polling", description="Your desc here") 
+        for p in types.keys():
+            embed.add_field(name= str(p) , value=str(types[p]["name"]))
+        await ctx.send(embed=embed)
 
 
     @command(
@@ -86,41 +91,62 @@ class poll_election(Cog):
         examples=["polls"],
         cls=commands.Command,
     )
-    async def polls(self, ctx: Context, code: str = None, start_date: str = None, end_date: str = None, company: str = None):
-        params = ["key="+config.OPINIONBEE_KEY]
-        if code is not None:
-            params.append("code="+code)
-        else:
-            params.append("code=WESTVI")
-        if start_date is not None:
-            params.append("start_date="+start_date)
-        if end_date is not None:
-            params.append("end_date="+end_date)
-        if company is not None:
-            params.append("company="+company)
-        url = "https://opinionbee.uk/json/v1.0/polls?"+ "&".join(params)
-        response = requests.get(url, headers={"Accept": "text/plain"})
-        polls = {}
-        for p in response.json():
-           date_ = date.fromisoformat(p["date"])
-           times = time.mktime(date_.timetuple())
-           for i in p["headline"].keys():
-               if i not in polls.keys():
-                   polls[i] = {
-                       "pct":[],
-                       "time":[],
-                       "colour":"#"+p["headline"][i]["party"]["colour"],
-                       "name":p["headline"][i]["party"]["name"]
-                   }
-               polls[i]["pct"] .append(p["headline"][i]["pct"])
-               polls[i]["time"].append(date_)
-        for i in polls.keys():
-            plt.plot(polls[i]["time"],polls[i]["pct"], 'o', color=polls[i]["colour"],label=polls[i]["name"])
-        plt.legend()
-        plt.savefig("test.png")
-        plt.close()
-        image = discord.File("test.png")
-        await ctx.send(file=image)
+    async def polls(self, ctx: Context, code: str = "WESTVI", start_date: str = None, end_date: str = None, company: str = None):
+            params = ["key="+config.OPINIONBEE_KEY]
+            if code is not None:
+                params.append("code="+code)
+            else:
+                params.append("code=WESTVI")
+            if start_date is not None:
+                params.append("start_date="+start_date)
+            if end_date is not None:
+                params.append("end_date="+end_date)
+            if company is not None:
+                params.append("company="+company)
+            # try:
+            url = "https://opinionbee.uk/json/v1.0/types?"+ "key="+config.OPINIONBEE_KEY
+            response = requests.get(url, headers={"Accept": "text/plain"})
+            datatype = response.json()
+            url = "https://opinionbee.uk/json/v1.0/polls?"+ "&".join(params)
+            response = requests.get(url, headers={"Accept": "text/plain"})
+            polls = {}
+            try:
+                for p in response.json():
+                   date_ = date.fromisoformat(p["date"])
+                   times = time.mktime(date_.timetuple())
+                   for i in p["headline"].keys():
+                       if i not in polls.keys():
+                            if p["headline"][i]["party"] is None:
+                                continue
+                            polls[i] = {
+                                "pct":[],
+                                "time":[]
+                            }
+                            if "colour" in p["headline"][i]["party"].keys():
+                                polls[i]["colour"] = "#"+p["headline"][i]["party"]["colour"]
+                            if "name" in p["headline"][i]["party"].keys():
+                                polls[i]["name"] = p["headline"][i]["party"]["name"]
+                            else:
+                               polls[i]["name"] = str(i)
+                       polls[i]["pct"] .append(p["headline"][i]["pct"])
+                       polls[i]["time"].append(date_)
+                for i in polls.keys():
+                    if "colour" in polls[i].keys():
+                        plt.plot(polls[i]["time"],polls[i]["pct"], 'o', color=polls[i]["colour"],label=polls[i]["name"])
+                    elif "name" in polls[i].keys():
+                        plt.plot(polls[i]["time"],polls[i]["pct"], 'o', label=polls[i]["name"])
+                    else:
+                        plt.plot(polls[i]["time"],polls[i]["pct"], 'o', color=polls[i]["colour"],label="error")
+                plt.title("poll of "+ datatype[code]["name"])
+                plt.xticks(rotation=45, ha='right')
+                plt.legend()
+                plt.savefig("test.png")
+                plt.close()
+                image = discord.File("test.png")
+                await ctx.send("thank to opinion bee",file=image)
+            except :
+                await ctx.send('Eorro. maybe that poll is boken!')
+
 
 
 
