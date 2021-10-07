@@ -28,6 +28,9 @@ BOT_CHANNEL_ID = 0
 GEONAMES_USERNAME = ""
 CLEARANCE_SPREADSHEET_ID = ""
 
+# Opinion Bee api
+OPINIONBEE_KEY = ""
+
 MODULES = {
     'google_drive': True,
     'webhooks': True,
