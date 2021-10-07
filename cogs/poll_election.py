@@ -41,7 +41,7 @@ class poll_election(Cog):
         cls=commands.Command,
     )
     async def companies(self, ctx: Context, code: str = None, start_date: str = None, end_date: str = None, company: str = None):
-        params = ["key=cf49eb5a301f0180152b28b7885c5b2c"]
+        params = ["key="+config.OPINIONBEE_KEY]
         if code is not None:
             params.append("code="+code)
         if start_date is not None:
