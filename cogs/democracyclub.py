@@ -34,8 +34,31 @@ class DemocracyClub(Cog):
         help='Show someone you polling station based on their home address.',
     )
     async def polling_station(self, ctx: Context,postcode):
+        print("polling_station")
         url = "https://wheredoivote.co.uk/api/beta/postcode/{postcode}.json".format(postcode=postcode)
-        
+        r = requests.get(url)
+        data = r.json()
+        polling_station_known = data ["polling_station_known"]
+        electoral_services_contacts_phone_numbers = data ["council"]["electoral_services_contacts"]["phone_numbers"]
+        electoral_services_contacts_email = data ["council"]["electoral_services_contacts"]["email"]
+        electoral_services_contacts_address = data ["council"]["electoral_services_contacts"]["address"]
+        electoral_services_contacts_postcode = data ["council"]["electoral_services_contacts"]["postcode"]
+        electoral_services_contacts_website = data ["council"]["electoral_services_contacts"]["website"]
+        electoral_services_contacts_identifiers = data ["council"]["electoral_services_contacts"]["identifiers"]
+        nation = data ["council"]["electoral_services_contacts"]["nation"]
+        council_id = data ["council"]["council_id"]
+        embed=discord.Embed()
+        embed.add_field(name="polling_station_known", value=polling_station_known, inline=False)
+        embed.add_field(name="electoral_services_contacts phone_numbers", value=electoral_services_contacts_phone_numbers, inline=False)
+        embed.add_field(name="electoral_services_contacts email", value=electoral_services_contacts_email, inline=False)
+        embed.add_field(name="electoral_services_contacts address", value=electoral_services_contacts_address, inline=False)
+        embed.add_field(name="electoral_services_contacts postcode", value=electoral_services_contacts_postcode, inline=False)
+        embed.add_field(name="electoral_services_contacts website", value=electoral_services_contacts_website, inline=False)
+        embed.add_field(name="electoral_services_contacts identifiers", value=electoral_services_contacts_identifiers, inline=False)
+        embed.add_field(name="electoral_services_contacts nation", value=nation, inline=False)
+        embed.add_field(name="council_id", value=council_id, inline=False)
+        await ctx.send(embed=embed)
+
 
     @tasks.loop(seconds=10.0)
     async def democracy_club(self):
