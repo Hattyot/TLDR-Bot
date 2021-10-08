@@ -29,16 +29,21 @@ class DemocracyClub(Cog):
     @Cog.listener()
     async def on_ready(self):
         self.democracy_club.start()
-
-
-
-
+    
+    @command(
+        help='Show someone you polling station based on their home address.',
+    )
+    async def polling_station(self, ctx: Context,postcode):
+        url = "https://wheredoivote.co.uk/api/beta/postcode/{postcode}.json".format(postcode=postcode)
+        
 
     @tasks.loop(seconds=10.0)
     async def democracy_club(self):
+        # pull data from democracyclub
+        results_feed = feedparser.parse(r'https://candidates.democracyclub.org.uk/results/all.atom')
+        # Check the Channel just i case i dont know what as been sent before
         given_name ="democracyclub"
         channel = discord.utils.get(self.bot.get_all_channels(), name=given_name)
-        results_feed = feedparser.parse(r'https://candidates.democracyclub.org.uk/results/all.atom')
         msgs = await channel.history(limit=len(results_feed.entries)*2).flatten()
         for msg in msgs:
             if msg.embeds != []:
@@ -59,6 +64,7 @@ class DemocracyClub(Cog):
             embed.add_field(name="winner person", value=entries["winner_person_name"], inline=False)
             embed.add_field(name="post name", value=entries["post_name"], inline=False)
             embed.add_field(name="election name", value=entries["election_name"], inline=False)
+            embed.add_field(name="election date", value=entries["election_date"], inline=False)
             embed.set_footer(text=entries["election_slug"]) 
             self.slug.append(entries["election_slug"])
             await channel.send(embed=embed)
