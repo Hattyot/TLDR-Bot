@@ -54,3 +54,7 @@ COGS = {
     'uk_parliament': True,
     'utility': True
 }
+timediff = {
+    
+    "days":365
+}
