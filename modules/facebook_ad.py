@@ -1,9 +1,11 @@
 import threading
+from warnings import filters
 import requests
 from pymongo import MongoClient, mongo_client
 import time
 import sys
-
+client = MongoClient(port=27017)
+democracyclub = client.democracyclub
 
 
 def recoder_facebook(data_ad_in):
@@ -11,35 +13,44 @@ def recoder_facebook(data_ad_in):
     data["_id"]=data_ad_in["ad_id"]
     if "spend" in data_ad_in["ad_json"].keys():
         data["spend"]=data_ad_in["ad_json"]["spend"]
-    if "page_id" in data_ad_in["ad_json"].keys():
-        data["page_id"]=data_ad_in["ad_json"]["page_id"]
+    if "page_id" in data_ad_in["ad_json"].keys() and "page_name" in data_ad_in["ad_json"].keys():
+        data["page"] ={
+            "name":data_ad_in["ad_json"]["page_name"],
+            "id":data_ad_in["ad_json"]["page_id"]
+        }
+    elif "page_name" in data_ad_in["ad_json"].keys():
+        data["page"] ={
+            "name":data_ad_in["ad_json"]["page_name"]
+            }
+    elif  "page_id" in data_ad_in["ad_json"].keys():
+        data["page"] ={
+            "id":data_ad_in["ad_json"]["page_id"]
+            }
     if "currency" in data_ad_in["ad_json"].keys():
         data["currency"]=data_ad_in["ad_json"]["currency"]
     if "funding_entity" in data_ad_in["ad_json"].keys():
-        data["funding_entity"] = data_ad_in["ad_json"]["funding_entity"]
-    if "page_name" in data_ad_in["ad_json"].keys():
-        data["page_name"] = data_ad_in["ad_json"]["page_name"]
+        data["fundingEntity"] = data_ad_in["ad_json"]["funding_entity"]
     if "impressions" in data_ad_in["ad_json"].keys():
         data["impressions"] = data_ad_in["ad_json"]["impressions"]
-    if "region_distribution" in data_ad_in["ad_json"].keys():
+    if "regionDistribution" in data_ad_in["ad_json"].keys():
         data["region_distribution"] = data_ad_in["ad_json"]["region_distribution"]
     if "ad_creative_body" in data_ad_in["ad_json"].keys():
-        data["ad_creative_body"] = data_ad_in["ad_json"]["ad_creative_body"]
+        data["adCreativeBody"] = data_ad_in["ad_json"]["ad_creative_body"]
     if "ad_delivery_start_time" in data_ad_in["ad_json"].keys():
-        data["ad_delivery_start_time"] = data_ad_in["ad_json"]["ad_delivery_start_time"]
-    if "ad_creation_time" in data_ad_in["ad_json"].keys():
-        data["ad_creation_time"] = data_ad_in["ad_json"]["ad_creation_time"]
+        data["adDeliveryStartTime"] = data_ad_in["ad_json"]["ad_delivery_start_time"]
+    if "ad creation time" in data_ad_in["ad_json"].keys():
+        data["adCreationTime"] = data_ad_in["ad_json"]["ad_creation_time"]
     if "ad_delivery_stop_time" in data_ad_in["ad_json"].keys():
-        data["ad_delivery_stop_time"] = data_ad_in["ad_json"]["ad_delivery_stop_time"]
-    if "associated_url" in data_ad_in["ad_json"].keys():
+        data["adDeliveryStopTime"] = data_ad_in["ad_json"]["ad_delivery_stop_time"]
+    if "associated url" in data_ad_in["ad_json"].keys():
         data["associated_url"] = data_ad_in["ad_json"]["associated_url"]
     if "image" in data_ad_in["ad_json"].keys():
         data["image"] = data_ad_in["ad_json"]["image"]
-    if "demographic_distribution" in data_ad_in["ad_json"].keys():
-        data["demographic_distribution"] = data_ad_in["demographic_distribution"]["image"]
-    if "region_distribution" in data_ad_in["ad_json"].keys():
-        data["demographic_distribution"] = data_ad_in["region_distribution"]["image"]
-    data["person_id"]= {
+    if "demographic distribution" in data_ad_in["ad_json"].keys():
+        data["demographicDistribution"] = data_ad_in["demographic_distribution"]["image"]
+    # if "region_distribution" in data_ad_in["ad_json"].keys():
+        # data["region distribution"] = data_ad_in["region_distribution"]["image"]
+    data["person"]= {
         "id": data_ad_in["person"]["id"],
         "url": data_ad_in["person"]["url"],
         "name": data_ad_in["person"]["name"],
@@ -82,10 +93,12 @@ class facebookAdPuller(threading.Thread):
             for result in data["results"]:
                 ## Check is in DB
                 number_of_entrys = self.democracyclub.facebook_ad_db.count_documents({"_id": result["ad_id"]})
+                #print(number_of_entrys)
                 if number_of_entrys != 0:
                     continue
                 ## Copy data in to db
                 document1 = recoder_facebook(result)
+                #print(document1)
                 output = self.democracyclub.facebook_ad_db.insert_one(document1)
             url = data["next"]
             if url is None:
@@ -134,17 +147,201 @@ class facebookAdPuller(threading.Thread):
               print(result["UK_Parliament_identifier"])
             if "UK_Parliament_thesaurus_ID" in result.keys():
               print(result["UK_Parliament_thesaurus_ID"])
+def query(*q):
+    def myFunc(e):
+      return e["index"]
+    alist = []
+    qstring = " ".join(q)
+    keywords = [
+        "ad delivery stop time",
+        "less then ad delivery stop time",
+        "greater then ad delivery stop time",
+        "greater equal then ad delivery stop time",
+        "less equal then ad delivery stop time",
+        #ad creation time
+        "ad creation time",
+        "less then ad creation time",
+        "greater then ad creation time",
+        "greater equal then ad creation time",
+        "less equal then ad creation time",
+        #ad delivery start time
+        "ad delivery start time" ,
+        "less then ad delivery start time" ,
+        "greater then ad delivery start time" ,
+        "greater equal then ad delivery start time" ,
+        "less equal then ad delivery start time"
+        #ad creative body
+        "ad creative body" ,
+        "regx ad creative body" ,
+        "has ad creative body" ,
+        "end ad creative body" ,
+        "start ad creative body" ,
+        "region distribution",
+        #impressions
+        "impressions",
+        "less then impressions",
+        "greater then impressions",
+        "greater equal then impressions",
+        "less equal then impressions",
+        #currency
+        "currency",
+        "less then currency",
+        "greater then currency",
+        "greater equal then currency",
+        "less equal then currency",
+        #page name
+        "page name",
+        "regx page name",
+        "start page name",
+        "end page name",
+        "has page name",
+        # funding entity
+        "funding entity",
+        "regx funding entity",
+        "start funding entity",
+        "end funding entity",
+        "has funding entity",
+        #name
 
-
-import re
-
+        ]
+    for kayword in keywords:
+        if kayword in qstring:
+            index = qstring.index(kayword)
+            alist.append({
+                "type":kayword,
+                "index":index,
+                "len":len(kayword + " ")
+            })
+    alist.sort(key=myFunc)
+    mongo_qurry = {    }
+    for i in range(len(alist)):
+        print(alist)
+        start = alist[i]["len"] + alist[i]["index"]
+        print(qstring[ alist[i]["index"]:start])
+        if len(alist) != i+1:
+            end = alist[i+1]["index"]
+            print(qstring[start:end])
+        else:
+            end = len(qstring)
+            print(qstring[start:end])
+        alist[i] = {"type":alist[i]["type"],"value":qstring[start:end]}
+    for i in range(len(alist)):
+        if "ad delivery stop time" in alist[i]["type"]:
+            mongo_qurry["adDeliveryStopTime"] = alist[i]["value"]
+        elif "less then ad delivery stop time" in alist[i]["type"]:
+            pass
+        elif "greater then ad delivery stop time" in alist[i]["type"]:
+            pass
+        elif "greater equal then ad delivery stop time" in alist[i]["type"]:
+            pass
+        elif "less equal then ad delivery stop time" in alist[i]["type"]:
+            pass
+        # if #ad creation time in alist[i]["type"]:
+        #     pass
+        elif "ad creation time" in alist[i]["type"]:
+            mongo_qurry["adCreationTime"] = alist[i]["value"]
+        elif "less then ad creation time" in alist[i]["type"]:
+            pass
+        elif "greater then ad creation time" in alist[i]["type"]:
+            pass
+        elif "greater equal then ad creation time" in alist[i]["type"]:
+            pass
+        elif "less equal then ad creation time" in alist[i]["type"]:
+            pass
+        # if #ad delivery start time in alist[i]["type"]:
+        #     pass
+        elif "ad delivery start time"  in alist[i]["type"]:
+            mongo_qurry["adDeliveryStartTime"] = alist[i]["value"]
+        elif "less then ad delivery start time"  in alist[i]["type"]:
+            pass
+        elif "greater then ad delivery start time"  in alist[i]["type"]:
+            pass
+        elif "greater equal then ad delivery start time"  in alist[i]["type"]:
+            pass
+        elif "less equal then ad delivery start time" in alist[i]["type"]:
+            pass
+        # if #ad creative body in alist[i]["type"]:
+        #     pass
+        elif "ad creative body"  in alist[i]["type"]:
+            mongo_qurry["adCreativeBody"] = alist[i]["value"]
+        elif "regx ad creative body" in alist[i]["type"]:
+            pass
+        elif "has ad creative body" in alist[i]["type"]:
+            pass
+        elif "end ad creative body" in alist[i]["type"]:
+            pass
+        elif "start ad creative body" in alist[i]["type"]:
+            pass
+        elif "region distribution" in alist[i]["type"]:
+            pass
+        # if #impressions in alist[i]["type"]:
+        #     pass
+        elif "impressions" in alist[i]["type"]:
+            mongo_qurry["impressions"] = alist[i]["value"]
+        elif "less then impressions" in alist[i]["type"]:
+            pass
+        elif "greater then impressions" in alist[i]["type"]:
+            pass
+        elif "greater equal then impressions" in alist[i]["type"]:
+            pass
+        elif "less equal then impressions" in alist[i]["type"]:
+            pass
+        # if #currency in alist[i]["type"]:
+        #     pass
+        elif "currency" in alist[i]["type"]:
+            mongo_qurry["currency"] = alist[i]["value"]
+        elif "less then currency" in alist[i]["type"]:
+            pass
+        elif "greater then currency" in alist[i]["type"]:
+            pass
+        elif "greater equal then currency" in alist[i]["type"]:
+            pass
+        elif "less equal then currency" in alist[i]["type"]:
+            pass
+        # if #page name in alist[i]["type"]:
+        #     pass
+        elif "page name" in alist[i]["type"]:
+            mongo_qurry["page.name"] = alist[i]["value"]
+        elif "regx page name" in alist[i]["type"]:
+            pass
+        elif "start page name" in alist[i]["type"]:
+            pass
+        elif "end page name" in alist[i]["type"]:
+            pass
+        elif "has page name" in alist[i]["type"]:
+            pass
+        # if # funding entity in alist[i]["type"]:
+        #     pass
+        elif "funding entity" in alist[i]["type"]:
+            mongo_qurry["fundingEntity"]  = alist[i]["value"]
+        elif "regx funding entity" in alist[i]["type"]:
+            pass
+        elif "start funding entity" in alist[i]["type"]:
+            pass
+        elif "end funding entity" in alist[i]["type"]:
+            pass
+        elif "has funding entity" in alist[i]["type"]:
+            pass
+        # if #name in alist[i]["type"]:
+        #     pass
+        elif "regx name" in alist[i]["type"]:
+            pass
+        elif "star tname" in alist[i]["type"]:
+            pass
+        elif "end name" in alist[i]["type"]:
+            pass
+        elif "name" in alist[i]["type"]:
+            mongo_qurry["name"] = alist[i]["value"]
+        print("qurry:",mongo_qurry)
+        rulsts = democracyclub.facebook_ad_db.find(mongo_qurry)
+        for i in rulsts:
+            print(i)
+        return rulsts
+code = facebookAdPuller()
+code.start()
 
 ## TEST script form hear down
 if __name__ == "__main__":
-    code = facebookAdPuller()
-    code.start()
-    client = MongoClient(port=27017)
-    democracyclub = client.democracyclub
     def exit():
         sys.exit(0)
     # funding_entity
@@ -242,153 +439,7 @@ if __name__ == "__main__":
         number_of_entrys = democracyclub.facebook_ad_db.distinct("currency")
         print(len(number_of_entrys))
     # Query
-    def myFunc(e):
-      return e["index"]
-    def query(*q):
-        alist = []
-        qstring = " ".join(q)
-        keywords = [
-            "ad delivery stop time",
-            "less then ad delivery stop time",
-            "greater then ad delivery stop time",
-            "greater equal then ad delivery stop time",
-            "less equal then ad delivery stop time",
-            #
-            "ad creation time",
-            "less then ad creation time",
-            "greater then ad creation time",
-            "greater equal then ad creation time",
-            "less equal then ad creation time",
-            #
-            "less then ad delivery start time" ,
-            "less then ad delivery start time" ,
-            "less then ad delivery start time" ,
-            "less then ad delivery start time" ,
-            #
-            "ad creative body" ,
-            "regx ad creative body" ,
-            "has ad creative body" ,
-            "end ad creative body" ,
-            "start ad creative body" ,
-            "region distribution",
-            #
-            "impressions",
-            "less then impressions",
-            "greater then impressions",
-            "greater equal then impressions",
-            "less equal then impressions",
-            #currency
-            "currency",
-            "less then currency",
-            "greater then currency",
-            "greater equal then currency",
-            "less equal then currency",
-            #page name
-            "page name",
-            "regx page name",
-            "start page name",
-            "end page name",
-            "has page name",
-            # funding entity
-            "funding entity",
-            "regx funding entity",
-            "start funding entity",
-            "end funding entity",
-            "has funding entity",
-            #name
-            "regx name",
-            "star tname",
-            "end name",
-            "name"
-            ]
-        for kayword in keywords:
-            if kayword in qstring:
-                index = qstring.index(kayword)
-                alist.append({
-                    "type":kayword,
-                    "index":index,
-                    "len":len(kayword + " ")
-                })
-        alist.sort(key=myFunc)
-        mongo_qurry = {
 
-        }
-        mongo_qurry["fff"] = "££"
-        for i in range(len(alist)):
-            print(alist)
-            start = alist[i]["len"] + alist[i]["index"]
-            print(qstring[ alist[i]["index"]:start])
-            if len(alist) != i+1:
-                end = alist[i+1]["index"]
-                print(qstring[start:end])
-            else:
-                end = len(qstring)
-                print(qstring[start:end])
-            alist[i] = (alist[i]["type"],qstring[start:end])
-        for i in range(len(alist)):
-            or_ = []
-            if "ad delivery stop time" in alist[i]["type"]:
-                print(alist[i]["type"])
-        for i in range(len(alist)):
-            or_ = []
-            if "ad creation time" in alist[i]["type"]:
-                print(alist[i]["type"])
-        for i in range(len(alist)):
-            or_ = []
-            if "ad delivery start time" in alist[i]["type"]:
-                print(alist[i]["type"])
-        for i in range(len(alist)):
-            or_ = []
-            if "ad creative body" in alist[i]["type"]:
-                print(alist[i]["type"])
-        for i in range(len(alist)):
-            or_ = []
-            if "impressions" in alist[i]["type"]:
-                print(alist[i]["type"])
-        for i in range(len(alist)):
-            or_ = []
-            if "currency" in alist[i]["type"]:
-                print(alist[i]["type"])
-        for i in range(len(alist)):
-            or_ = []
-            if "page name" in alist[i]["type"]:
-                if "regx" in alist[i]["type"]:
-                    pass
-                if "has" in alist[i]["type"]:
-                    pass
-                if "end" in alist[i]["type"]:
-                    pass
-                if "start" in alist[i]["type"]:
-                    pass
-                if "has" in alist[i]["type"]:
-                    pass
-                print(alist[i]["type"])
-        for i in range(len(alist)):
-            or_ = []
-            if "funding entity" in alist[i]["type"]:
-                if "regx" in alist[i]["type"]:
-                    pass
-                if "has" in alist[i]["type"]:
-                    pass
-                if "end" in alist[i]["type"]:
-                    pass
-                if "start" in alist[i]["type"]:
-                    pass
-                if "has" in alist[i]["type"]:
-                    pass
-                print(alist[i]["type"])
-        for i in range(len(alist)):
-            or_ = []
-            if "name" in alist[i]["type"]:
-                if "regx" in alist[i]["type"]:
-                    { "quantity": { "$regex": 20 } }
-                elif "exists" in alist[i]["type"]:
-                    { "quantity": { "$regex": 20 } }
-                elif "in" in alist[i]["type"]:
-                    { "quantity": { "$in": 20 } }
-                else:
-                    { "quantity": { "$regex": 20 } }
-            print(alist[i]["type"])
 
     commands ={
         "query": query,
