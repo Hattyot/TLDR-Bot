@@ -603,7 +603,6 @@ class Events(Cog):
     @Cog.listener()
     async def on_member_remove(self, member: discord.Member):
         if self.bot.captcha:
-            print("Triggering on_member leave in Captcha module.")
             await self.bot.captcha.on_member_leave(member)
 
         leveling_user = db.leveling_users.find_one(

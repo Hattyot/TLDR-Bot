@@ -4,11 +4,11 @@ import os
 import traceback
 from datetime import datetime
 
-import config
 import discord
 from discord.ext.commands import Bot, when_mentioned_or
 from twtsc import Twtsc
 
+import config
 import modules.captcha_verification
 import modules.commands
 import modules.custom_commands
@@ -129,6 +129,7 @@ class TLDR(Bot):
             if self.enabled_modules["captcha"]
             else None
         )
+        self.twtsc = None
         self.first_ready = False
 
     def add_cog(self, cog):

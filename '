@@ -20,9 +20,9 @@ from discord.invite import Invite
 from pymongo.cursor import Cursor
 
 import modules.database as database
+import modules.embed_maker as embed_maker
 import modules.timers as timers
 from modules.utils import SettingsHandler
-from ukparliament.utils import BetterEnum
 
 """
 Author: TheMasteredPanda (Duke J. Morgan)
@@ -282,7 +282,7 @@ class DataManager:
                 {"name": re.compile(f"^{username}.*", re.IGNORECASE)}
             )
             if username != ""
-            else self._member_cache.find({"mid": "/^{member_id}.*/is"})
+            else self._member_cache.find({"mid": f"/^{member_id}.*/is"})
         )
 
     def remove_blacklisted_member(self, member_id: int):
@@ -372,7 +372,7 @@ class DataManager:
             else self._captcha_guilds.find({}, {"stats": 0})
         )
 
-    def is_blacklisted(self, member_id: int) -> bool:
+    def is_blacklisted(self, member_id: int) -> Union[Cursor, list, None]:
         """
         Checks if a user is blacklisted.
 
@@ -450,14 +450,11 @@ class DataManager:
     def is_registered_invitation(self, invite_code: str):
         return self._registered_invitations.find({"code": invite_code}) is not None
 
-    def add_registered_invitation(self, invite_code: str, i_type: int):
-        self._registered_invitations.insert_one({"code": invite_code, "type": i_type})
+    def add_registered_invitation(self, invite_code: str):
+        self._registered_invitations.insert_one({"code": invite_code})
 
     def remove_registered_invitation(self, invite_code: str):
         self._registered_invitations.delete_one({"code": invite_code})
-
-    def get_registered_invite(self, invite_code: str):
-        return self._registered_invitations.find_one({"code": invite_code})
 
 
 class TrackerManager:
@@ -472,7 +469,8 @@ class TrackerManager:
         self._cache = {}  # To keep all information on invites only.
         self._invite_cache = {}
         self._temporal_cache = {}  # To keep all temporal information on invites.
-
+        self._minimum_member_count = 0  # This is the number of members that can join with n number of seconds before it is considered to be a bot attack.
+        self._member_join_timeout = 0  # This is the number of seconds, the 'timeout' that is used to determine whether a bot attack is happening on a unprotected invitiation.
         self._bot = bot
 
     def has_temporal_entry(self, invite_code: str):
@@ -491,7 +489,7 @@ class TrackerManager:
         """
         return invite_code in self._temporal_cache.keys()
 
-    def is_user_registered(self, invite_code: str) -> bool:
+    def is_registered(self, invite_code: str) -> bool:
         """
         Checks if an inviation link is registered.
 
@@ -505,26 +503,7 @@ class TrackerManager:
         :class:`bool`
             True if the invite link is registered, else false.
         """
-        registered = self._data_manager.is_registered_invitation(invite_code)
-        if registered is False:
-            return False
-        invite_entry = self._data_manager.get_registered_invite(invite_code)
-        if invite_entry is None:
-            return False
-        return invite_entry["type"] == 2
-
-    def is_captcha_registered(self, invite_code: str) -> bool:
-        """
-        Checks if an invitation link has been registered by the Captcha module. Invitations registered
-        by the captcha module programmatically are links created after a successful captcha.
-        """
-        registered = self._data_manager.is_registered_invitation(invite_code)
-        if registered is False:
-            return False
-        invite_entry = self._data_manager.get_registered_invite(invite_code)
-        if invite_entry is None:
-            return False
-        return invite_entry["type"] == 1
+        return self._data_manager.is_registered_invitation(invite_code)
 
     def create_temporal_entry(self, invite_code: str):
         """
@@ -620,16 +599,6 @@ class TrackerManager:
         self._main_guild = self._bot.get_guild(config.MAIN_SERVER)
         self._module = self._bot.captcha
         self._data_manager = self._module.get_data_manager()
-        self._minimum_member_count = self._module.get_module_settings()[
-            "unregistered_invitations"
-        ][
-            "minimum_member_count"
-        ]  # This is the number of members that can join with n number of seconds before it is considered to be a bot attack.
-        self._member_join_timeout = self._module.get_module_settings()[
-            "unregistered_invitations"
-        ][
-            "join_timeout"
-        ]  # This is the number of seconds, the 'timeout' that is used to determine whether a bot attack is happening on a unprotected invitiation.
         invites: list[Invite] = await self._main_guild.invites()
         for invite in invites:
             self._invite_cache[invite.id] = invite.uses
@@ -653,9 +622,12 @@ class TrackerManager:
         invite_used = None
 
         for invite in invites:
-            uses = self._invite_cache[invite.id]
-            if invite.uses > uses:
-                invite_used = invite
+            if invite.code not in self._invite_cache.keys():
+                self._invite_cache[invite.id] = invite.uses
+            else:
+                uses = self._invite_cache[invite.id]
+                if invite.uses > uses:
+                    invite_used = invite
 
         if invite_used is None:
             self._logger.info(
@@ -663,20 +635,9 @@ class TrackerManager:
             )
             return
         else:
-            self._logger.info(
-                f"Member {member.display_name} joined from invite {invite_used.id}"
-            )
-            if self.is_captcha_registered(invite_used.id):
-                self._logger.info(
-                    f"Member {member.display_name} joined from captcha registered invite. Deleting invite."
-                )
-                self._data_manager.remove_registered_invitation(invite_used.id)
-                await invite_used.delete(
-                    reason="Captcha invite. Deleting after single use."
-                )
-                return
+            self._logger.info(f"Member joined from invite {invite_used.id}")
 
-        if self.is_user_registered(invite_used.id):
+        if self.is_registered(invite_used.id):
             return
 
         if self.has_temporal_entry(invite_used.id) is False:
@@ -685,22 +646,20 @@ class TrackerManager:
         self.add_member_to_temporal_entry(invite_used.id, member.id)
         entry = self.get_temporal_entry(invite_used.id)
 
-        print(time.time() - entry["finished"])
-        if entry["finished"] >= time.time():
+        if entry["finished"] <= time.time():
             if len(entry["uses"]) >= self._minimum_member_count:
                 self._logger.info(f"Potential bot attack detected on {invite_used.id}.")
                 used_unregistered_message = self._module.get_module_settings()[
                     "messages"
                 ]["used_unregistered_message"]
 
-                print(f"Uses: {entry['uses']}")
                 for member_id in entry["uses"]:
                     e_member: discord.Member = member.guild.get_member(member_id)
                     dm_channel: Union[TextChannel, None] = e_member.dm_channel
                     if dm_channel is None:
                         dm_channel = await e_member.create_dm()
 
-                    invite: Invite = await self._module.get_invitation_to_gateway()
+                    invite: Invite = self._module.get_invitation_to_gateway()
                     await dm_channel.send(
                         used_unregistered_message.replace("{invite}", invite.url)
                     )
@@ -708,35 +667,26 @@ class TrackerManager:
                         reason=f"Considered a bot by Captcha Gateway, using invite {invite.url}."
                     )
 
+                self.remove_temporal_entry(invite_used.id)
                 self._logger.info(
                     f"Deleting invitation link {invite_used.url} as it was determined by Tracker Manager in Captcha Gateway to be used for a potential bot attack."
                 )
                 await invite_used.delete(reason="Used in a potential bot attack.")
-                self.remove_temporal_entry(invite_used.id)
-        else:
+        elif entry["finished"] > time.time():
             self._logger.info(
                 f"Removing temporal entry associated with {invite_used.url} because a potential bot attack was not detected."
             )
             self.remove_temporal_entry(invite_used.id)
 
     async def on_invite_create(self, invite: Invite):
-        if invite.guild.id != config.MAIN_SERVER:
-            return
-
         self._invite_cache[invite.id] = invite.uses
         self._logger.info(
             f"Invite created. Added invitation link {invite.id} to the invite link cache."
         )
 
     async def on_invite_delete(self, invite: Invite):
-        if invite.guild.id != config.MAIN_SERVER:
-            return
-
-        if invite.id in self._temporal_cache.keys():
-            del self._temporal_cache[invite.id]
-        if invite.id in self._temporal_cache.keys():
-            del self._invite_cache[invite.id]
-
+        del self._temporal_cache[invite.id]
+        del self._invite_cache[invite.id]
         self._logger.info(
             f"Invite link deleted. Removing invitation link {invite.id} from the invite link cache."
         )
@@ -768,7 +718,7 @@ class CaptchaChannel:
         self._internal_clock = 0
         self._active = False
         self._logger = bot.logger
-        bot.add_listener(self.on_message, "on_message")
+        bot.add_listener(self.on_message, 'on_message')
 
     def get_ttl(self):
         """
@@ -890,9 +840,10 @@ class CaptchaChannel:
                 ],
                 description=self._bot.captcha.get_config()["messages"][
                     "time_elapsed_message"
-                ].format(time_unit, time_value),
+                ]
+                .replace("{time_value}", time_value)
+                .replace("{time_unit}", time_unit),
             )
-
             await self._channel.send(embed=embed)
             self.countdown.stop()
             self._data_manager.update_captcha_channel(
@@ -905,9 +856,6 @@ class CaptchaChannel:
                 },
             )
             if self._bot.captcha.is_operator(self._member.id) is False:
-                if self._data_manager.is_blacklisted(self._member.id):
-                    return
-
                 await self._member.ban(reason="Failed to complete Captcha assessment.")
                 self._data_manager.add_member_to_blacklist(
                     self._member, 900, "Failed to complete Captcha assessment."
@@ -1054,9 +1002,6 @@ class CaptchaChannel:
         if self._answer_text is None:
             return
 
-        if self._completed:
-            return
-
         if message.content.lower() != self._answer_text:
             await self._channel.send("Incorrect.")
             self._tries = self._tries - 1 if self._tries > 0 else 0
@@ -1073,7 +1018,7 @@ class CaptchaChannel:
                 )
                 if self._bot.captcha.is_operator(self._member.id) is False:
                     self._data_manager.add_blacklisted_member(self._member)
-                    reason = "Failed to complete Captcha assessment in time.."
+                    reason = "Failed to complete Captcha assessment; failed to complete the assessment in time.."
 
                     self._data_manager.add_member_to_blacklist(
                         self._member,
@@ -1088,10 +1033,7 @@ class CaptchaChannel:
         else:
             self._invite = await self.create_tldr_invite()
             if self._invite is None:
-                await self._channel.send(
-                    "Failed to create invitation link. This is likely due to incorrect configuration. Please try to contact someone using the ticketing system provided."
-                )
-                return
+                await self._channel.send(f"Failed to create invitation link. This is likely due to incorrect configuration. Please try to contact someone using the ticketing system provided.")
             url = self._invite.url
             embed: discord.Embed = discord.Embed(
                 color=config.EMBED_COLOUR,
@@ -1134,10 +1076,7 @@ class CaptchaChannel:
             )
             return
 
-        invite: Invite = await main_channel.create_invite(max_age=120, max_uses=2)
-        self._data_manager.add_registered_invitation(
-            invite.id, 1
-        )  # Registering captcha invite.
+        invite: Invite = await main_channel.create_invite(max_age=120, max_uses=1)
         return invite
 
     async def destory(self):
@@ -1419,7 +1358,6 @@ class GatewayGuild:
                     if ban.user.id == member.id:
                         return
 
-                self._data_manager.add_blacklisted_member(member)
                 self._data_manager.add_member_to_blacklist(
                     member,
                     self._bot.captcha.get_config()["gateway_rejoin"][
@@ -1469,10 +1407,6 @@ class CaptchaModule:
                 "main_announcement_channel": 0,
                 "captcha_time_to_live": 900,
                 "blacklist_length": 86400,
-                "unregistered_invitations": {
-                    "minimum_member_count": 1,
-                    "join_timeout": 10,
-                },
                 "announcements": {
                     "announcement_channel": None,
                     "scheduled_report": {"last_report": None, "interval": 86400},
@@ -1503,17 +1437,11 @@ class CaptchaModule:
         self._logger.info("Captcha Gateway settings found.")
         self._logger.info("Captcha Gateway Module initiated.")
         self._bot.add_listener(self.on_ready, "on_ready")
-        self._bot.add_listener(
-            self._tracker_manager.on_invite_create, "on_invite_create"
-        )
-        self._bot.add_listener(
-            self._tracker_manager.on_invite_delete, "on_invite_delete"
-        )
 
     async def on_ready(self):
-        self._logger.info("Loading Captcha Gateway Module.")
+        self._logger.info('Loading Captcha Gateway Module.')
         await self.load()
-        self._logger.info("Loading Captcha Gateway Module.")
+        self._logger.info('Loading Captcha Gateway Module.')
 
     async def load(self):
         """
@@ -1526,6 +1454,7 @@ class CaptchaModule:
                 mongo_guild_ids,
             )
         )
+        print(f"Valid Guilds ID: {valid_guild_ids}")
         if len(valid_guild_ids) == 0:
             if len(self._bot.guilds) >= 10:
                 return await self._bot.critical_error(
@@ -1972,6 +1901,12 @@ class CaptchaModule:
         for g_guild in self._gateway_guilds:
             if g_guild.get_guild().id == guild_id:
                 await g_guild.on_member_leave(member)
+
+    async def on_invite_create(self, invite: Invite):
+        await self._tracker_manager.on_invite_create(invite)
+
+    async def on_invite_delete(self, invite: Invite):
+        await self._tracker_manager.on_invite_delete(invite)
 
     async def on_member_join(self, member: discord.Member):
         """

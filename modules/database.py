@@ -259,7 +259,9 @@ class Connection:
     captcha_registered_invitations: :class:`pymongo.collection.Collection`
         The collection for storing invitations registered as acceptable to use.
             {
-                'code': :class:`str`
+                'code': :class:`str`,
+                'type': :class:'int',
+            }
     tweet_listeners :class:`pymongo.collection.Collection`
         The collection that holds the data for tweet listeners.
             {
@@ -295,7 +297,7 @@ class Connection:
         self.captcha_blacklist = self.db["captcha_blacklist"]
         self.captcha_counter = self.db["captcha_counter"]
         self.captcha_member_cache = self.db["captcha_member_cache"]
-        self.captcha_registered_invitations = self.db["catpcha_registered_invitations"]
+        self.captcha_registered_invitations = self.db["captcha_registered_invitations"]
         self.webhooks = self.db["webhooks"]
         self.slack_bridge = self.db["slack_bridge"]
         self.slack_messages = self.db["slack_messages"]

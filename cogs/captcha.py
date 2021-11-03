@@ -46,6 +46,9 @@ class Captcha(Cog):
             member_cache_entry = (
                 self.bot.captcha.get_data_manager().get_blacklisted_member(mid)
             )
+            blacklist_entry = (
+                self.bot.captcha.get_data_manager().get_blacklisted_member_info(mid)
+            )
             if member_cache_entry is None:
                 self.bot.logger.info(f"Failed to find associated name for {mid}.")
 
@@ -68,6 +71,7 @@ class Captcha(Cog):
                         else f"-  **{member_name}**",
                         f"  **Started:** {formatted_started}",
                         f"  **Ends:** {formatted_ends} ({timedelta(seconds=diff)})",
+                        f"  **Reason:** {blacklist_entry['reason'] if blacklist_entry is not None else 'No Reason'}",
                     ]
                 )
             )
@@ -311,6 +315,9 @@ class Captcha(Cog):
         cls=Command,
     )
     async def blacklist_counter_reset(self, ctx: Context, argument: str = ""):
+        if argument == "":
+            return await embed_maker.command_error(ctx)
+
         member = None
 
     @blacklist_mod_cmd.command(
@@ -397,7 +404,13 @@ class Captcha(Cog):
             else data_manager.get_blacklisted_members(member_id=int(argument))
         )
 
-        if len(blacklisted_members) == 0:
+        is_blacklisted = (
+            data_manager.is_blacklisted(member_id=int(argument))
+            if argument.isnumeric()
+            else True
+        )
+
+        if len(blacklisted_members) == 0 and is_blacklisted is False:
             return await embed_maker.message(
                 ctx,
                 description=f"Couldn't find blacklisted member starting with name or id {argument}",
@@ -420,16 +433,19 @@ class Captcha(Cog):
                 send=True,
             )
 
-        member_entry = blacklisted_members[0]
+        member_entry = blacklisted_members[0] if len(blacklisted_members) > 0 else None
 
-        await self.bot.captcha.unban(member_id=member_entry["mid"])
-        data_manager.reset_captcha_counter(member_id=member_entry["mid"])
-        data_manager.remove_blacklisted_member(member_entry["mid"])
-        data_manager.remove_member_from_blacklist(member_entry["mid"])
+        member_id = (
+            member_entry["mid"] if len(blacklisted_members) > 0 else int(argument)
+        )
+        await self.bot.captcha.unban(member_id=member_id)
+        data_manager.reset_captcha_counter(member_id=member_id)
+        data_manager.remove_blacklisted_member(member_id)
+        data_manager.remove_member_from_blacklist(member_id)
 
         await embed_maker.message(
             ctx,
-            description=f"Removed {member_entry['name']} from the blacklist.",
+            description=f"Removed {member_entry['name'] if len(blacklisted_members) > 0 else argument} from the blacklist.",
             title="Removed member from blacklist",
             send=True,
         )
@@ -591,13 +607,16 @@ class Captcha(Cog):
             return await embed_maker.command_error(ctx)
 
         data_manager = self.bot.captcha.get_data_manager()
+        print(f"Is {argument} numeric: {argument.isnumeric()}")
         blacklisted_members = list(
             data_manager.get_blacklisted_members(username=argument)
             if argument.isnumeric() is False
             else data_manager.get_blacklisted_members(member_id=int(argument))
         )
 
-        if len(blacklisted_members) == 0:
+        is_blacklisted = data_manager.is_blacklisted(int(argument))
+
+        if len(blacklisted_members) == 0 and is_blacklisted is False:
             return await embed_maker.message(
                 ctx,
                 description=f"Member starting with name or id {argument} is not blacklisted.",
@@ -613,11 +632,19 @@ class Captcha(Cog):
                 send=True,
             )
 
-        data_manager.reset_captcha_counter(member_id=blacklisted_members[0]["mid"])
-        data_manager.remove_blacklisted_member(member_id=blacklisted_members[0]["mid"])
+        data_manager.reset_captcha_counter(
+            member_id=blacklisted_members[0]["mid"]
+            if len(blacklisted_members) > 0
+            else int(argument)
+        )
+        data_manager.remove_blacklisted_member(
+            member_id=blacklisted_members[0]["mid"]
+            if len(blacklisted_members)
+            else int(argument)
+        )
         return await embed_maker.message(
             ctx,
-            description=f"Removed member {blacklisted_members[0]['name']} from blacklist and reset relog counter.",
+            description=f"Removed member {blacklisted_members[0]['name'] if len(blacklisted_members) > 0 else argument} from blacklist and reset relog counter.",
             send=True,
             title="Removed member from blacklist.",
         )

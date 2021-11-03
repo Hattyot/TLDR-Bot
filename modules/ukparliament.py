@@ -1,13 +1,9 @@
-import configparser
-import os
 import random
 import string
-import time
 from datetime import datetime
 from io import BytesIO
 from typing import Union
 
-import aiofiles
 import config
 import discord
 from cachetools.ttl import TTLCache
@@ -356,6 +352,7 @@ class UKParliamentModule:
         self._divisions_storage = DivisionMongoStorage()
         self._bills_storage = BillsMongoStorage()
         self.confirm_manager = ConfirmManager()
+        self._bot.add_listener(self.on_ready, "on_ready")
 
         """
         These are used to allow a check  of the trackers to be done in the guild.
@@ -461,7 +458,6 @@ class UKParliamentModule:
 
     @timers.loop(seconds=60)
     async def tracker_event_loop(self):
-        print("UKParliament Loop Trigger.")
         division_listener = (
             self.tracker_status["lordsdivisions"]["started"]
             or self.tracker_status["commonsdivisions"]["started"]
