@@ -101,7 +101,6 @@ class Captcha(Cog):
         usage="captcha servers [sub command]",
         examples=["captcha servers list"],
         cls=Group,
-        module_dependency=["captcha"],
         invoke_without_command=True,
     )
     async def captcha_servers_cmd(self, ctx: Context):
@@ -110,16 +109,20 @@ class Captcha(Cog):
     @captcha_servers_cmd.command(
         help="Lists active gateway servers",
         name="list",
-        usage="captcha servers create",
-        examples=["captcha servers create"],
-        module_dependency=["captcha"],
+        usage="captcha servers list",
+        examples=["captcha servers list"],
         cls=Command,
     )
     async def list_servers_cmd(self, ctx: Context):
         bits = []
 
         for g_guild in self.bot.captcha.get_gateway_guilds():
-            g_bits = [f"- **{g_guild.get_name()}**", f"**ID:** {g_guild.get_id()}"]
+            invite = await g_guild.get_permantent_invite()
+            g_bits = [
+                f"- **{g_guild.get_name()}**",
+                f"**ID:** {g_guild.get_id()}",
+                f"**Link:** {invite.url}",
+            ]
             bits.append("\n".join(g_bits))
 
         await embed_maker.message(
@@ -129,36 +132,91 @@ class Captcha(Cog):
             send=True,
         )
 
-    @captcha_cmd.group(
-        help="A set of commands used to administrate and moderate this feature.",
-        name="mod",
-        usage="captcha mod [sub command]",
-        examples=["captcha mod config set"],
-        cls=Group,
-        invoke_without_command=True,
-    )
-    async def mod_cmd(self, ctx: Context):
-        return await embed_maker.command_error(ctx)
-
     @captcha_cmd.command(
         help="A set of commands used to manage invitations that should not be tracked by the Tracker Manager. A Manager written to detect potential bot attacks from unregistered invitations and delete said invitations.",
         name="invite",
-        examples=["captcha mod invite list"],
-        usage="captcha mod invite [sub command]",
+        examples=["captcha invite register"],
+        usage="captcha invite [sub command]",
         cls=Group,
         invoke_without_command=True,
     )
-    async def invite_mod_cmd(self, ctx: Context):
+    async def invite_cmd(self, ctx: Context):
         return await embed_maker.command_error(ctx)
 
-    @captcha_cmd.command(
-        help="Registers invitations with the Captcha Gateway Feature. Any invitations registered would not be tracked by the Tracker Manager. This manager tracks all unregistered invitations for potential bot attacks then deletes said invite after detecting an attack.",
-        name="register",
-        examples=["captcha mod invite register [invite url]"],
-        usage="captcha mod invite register [invite url]",
+    async def construct_invite_list_embed(
+        self,
+        ctx: Context,
+        r_invites: list,
+        max_page_num: int,
+        page_limit: int,
+        *,
+        page: int,
+    ):
+        if len(r_invites) == 0:
+            return await embed_maker.message(
+                ctx, description="No user registered invites."
+            )
+
+        bits = []
+        for i, entry in enumerate(
+            r_invites[page_limit * (page - 1) : page_limit * page]
+        ):
+            bits.append(f"{i + 1}. https://discord.gg/{entry}")
+
+        return await embed_maker.message(
+            ctx,
+            description="\n".join(bits),
+            author={"name": "Captcha Gateway"},
+            footer={"text": f"Page {page}/{max_page_num}"},
+        )
+
+    @invite_cmd.command(
+        help="Lists all user registered invitations",
+        name="list",
+        exmaples=["captcha invite list"],
+        usage="captcha invite list",
         cls=Command,
     )
-    async def register_invite_cmd(self, ctx: Context, invite_url: str):
+    async def list_invite_cmd(self, ctx: Context):
+        max_page_size = 10
+        r_invites = list(
+            map(
+                lambda e: e["code"],
+                self.bot.captcha.get_data_manager().get_all_registered_invites(2),
+            )
+        )
+
+        max_page_num = math.ceil(len(r_invites) / max_page_size)
+        page_constructor = functools.partial(
+            self.construct_invite_list_embed,
+            ctx=ctx,
+            r_invites=r_invites,
+            max_page_num=max_page_num,
+            page_limit=max_page_size,
+        )
+
+        embed = await page_constructor(page=1)
+        message = await ctx.send(embed=embed)
+        menu = BookMenu(
+            message,
+            page=1,
+            max_page_num=max_page_num,
+            page_constructor=page_constructor,
+            author=ctx.author,
+        )
+        self.bot.reaction_menus.add(menu)
+
+    @invite_cmd.command(
+        help="Registers invitations with the Captcha Gateway Feature. Any invitations registered would not be tracked by the Tracker Manager. This manager tracks all unregistered invitations for potential bot attacks then deletes said invite after detecting an attack.",
+        name="register",
+        examples=["captcha invite register [invite url]"],
+        usage="captcha invite register [invite url]",
+        cls=Command,
+    )
+    async def register_invite_cmd(self, ctx: Context, invite_url: str = ""):
+        if invite_url == "":
+            return await embed_maker.command_error(ctx)
+
         data_manager = self.bot.captcha.get_data_manager()
 
         try:
@@ -171,7 +229,7 @@ class Captcha(Cog):
                     send=True,
                 )
             else:
-                data_manager.add_registered_invitation(invite.id)
+                data_manager.add_registered_invitation(invite.id, 2)
                 return await embed_maker.message(
                     ctx,
                     description=f"Added invitation to the registered invitations collection.",
@@ -186,21 +244,21 @@ class Captcha(Cog):
                 send=True,
             )
 
-    @mod_cmd.command(
+    @captcha_cmd.command(
         help="Get a report on how many successful and unsuccessful captchas happened. The data set is determined by what the interval value is set as.",
         name="report",
-        usage="captcha mod report",
-        examples=["captcha mod report"],
+        usage="captcha report",
+        examples=["captcha report"],
         cls=Command,
     )
     async def report_mod_cmd(self, ctx: Context):
         return await ctx.send(embed=self.bot.captcha.construct_scheduled_report_embed())
 
-    @mod_cmd.group(
+    @captcha_cmd.group(
         help="A set of commands used to configure the configurable elements of this feature.",
         name="config",
-        usage="captcha mod config [sub command]",
-        examples=["captcha mod config set landing_channel.name welcome"],
+        usage="captcha config [sub command]",
+        examples=["captcha config set landing_channel.name welcome"],
         cls=Group,
         invoke_without_command=True,
     )
@@ -214,21 +272,11 @@ class Captcha(Cog):
             send=True,
         )
 
-    @mod_cmd.command(
-        help="Resets the welcome message to whatever is set in the configuration document",
-        name="resetwelcomemessage",
-        uage="captcha mod config resetwelcomemessage",
-        examples=["captcha mod config restwelcomemessage"],
-        cls=Command,
-    )
-    async def reset_welcome_message_config_cmd(self, ctx: Context):
-        pass
-
     @config_mod_cmd.group(
         help="Set a value of a configuration variable.",
         name="set",
-        usage="captcha mod config set [variable name] [value]",
-        examples=["captcha mod config set landing_channel.name welcome-tldr"],
+        usage="captcha config set [variable name] [value]",
+        examples=["captcha config set landing_channel.name welcome-tldr"],
         cls=Command,
         command_args=[
             (
@@ -252,10 +300,11 @@ class Captcha(Cog):
             if args["value"] is None:
                 return await embed_maker.command_error(ctx, "value")
 
-        self.bot.captcha.set_setting(
+        await self.bot.captcha.set_setting(
             args["path"],
             args["value"] if args["value"].isnumeric() is False else int(args["value"]),
         )
+
         await embed_maker.message(
             ctx,
             description=f"Set value {args['value']} on setting {args['path']}",
@@ -263,13 +312,13 @@ class Captcha(Cog):
             send=True,
         )
 
-    @mod_cmd.group(
+    @captcha_cmd.group(
         help="Blacklist - for users who couldn't pass the first set of Captcha tests. These commands allow the viewing, adding, and removing of users on the Blacklist.",
         name="blacklist",
-        usage="captcha mod blacklist [sub-command]",
+        usage="captcha blacklist [sub-command]",
         examples=[
-            "captcha mod blacklist",
-            "captcha mod blacklist add TheMasteredPanda 24h",
+            "captcha blacklist",
+            "captcha blacklist add TheMasteredPanda 24h",
         ],
         cls=Group,
         invoke_without_command=True,
@@ -280,8 +329,8 @@ class Captcha(Cog):
     @blacklist_mod_cmd.command(
         help="List all blacklisted users. Learn their reasons and for how long their blacklist lasts for.",
         name="list",
-        usage="captcha mod blacklist list",
-        examples=["captcha mod blacklist list"],
+        usage="captcha blacklist list",
+        examples=["captcha blacklist list"],
         cls=Command,
     )
     async def blacklist_list_mod_cmd(self, ctx: Context):
@@ -325,8 +374,8 @@ class Captcha(Cog):
         name="add",
         usage="add",
         examples=[
-            "captcha mod blacklist add [name of member] [time (40h20m4s)]",
-            "captcha mod blacklist add TheMasteredPanda 24h",
+            "captcha blacklist add [name of member] [time (40h20m4s)]",
+            "captcha blacklist add TheMasteredPanda 24h",
         ],
         command_args=[
             (("--name", "-n", str), "Name of the user you want to blacklist."),
@@ -389,8 +438,8 @@ class Captcha(Cog):
     @blacklist_mod_cmd.command(
         help="Remove a member from the blacklist. This will also reset the relog counter of the user.",
         name="remove",
-        usage="captcha mod blacklist remove",
-        examples=["captcha mod blacklist remove [name of member / member id]"],
+        usage="captcha blacklist remove",
+        examples=["captcha blacklist remove [name of member / member id]"],
         cls=Command,
     )
     async def blacklist_rm_cmd(self, ctx: Context, *, argument: str = ""):
@@ -666,7 +715,6 @@ class Captcha(Cog):
         usage="captcha dev create guild",
         examples=["captcha dev create guild"],
         cls=Command,
-        module_dependency=["captcha"],
         invoke_without_command=True,
     )
     async def dev_create_server(self, ctx: Context):
@@ -690,7 +738,6 @@ class Captcha(Cog):
         name="list",
         usage="captcha dev list",
         examples=["captcha dev list"],
-        module_dependency=["captcha"],
         cls=Command,
     )
     async def dev_guild_list(self, ctx: Context):
@@ -719,7 +766,6 @@ class Captcha(Cog):
         name="delete",
         usage="captcha dev delete",
         examples=["captcha dev delete"],
-        module_dependency=["captcha"],
         command_args=[
             (("--name", "-n", str), "Guild name"),
             (
@@ -922,14 +968,14 @@ class Captcha(Cog):
             file=File(fp=captcha_image, filename="captcha.png"), embed=embed
         )
 
-    @dev_cmds.command(
+    @captcha_cmd.command(
         help="Add or remove an operator to an operator list. This will allow member on the op list to become operators when they join Gateway Guilds. Affording them admin access on the guild.",
         name="op",
-        usage="captcha dev op TheMasteredPanda",
-        examples=["captcha dev op TheMasteredPanda"],
+        usage="captcha op TheMasteredPanda",
+        examples=["captcha op TheMasteredPanda"],
         cls=Command,
     )
-    async def dev_operator(self, ctx: Context, member_string: str = None):
+    async def mod_operator(self, ctx: Context, member_string: str = None):
         if member_string is None:
             return await embed_maker.command_error(ctx)
 
@@ -997,53 +1043,6 @@ class Captcha(Cog):
             author={"name": "Captcha Gateway"},
             footer={"text": f"Page {page}/{max_page_num}"},
         )
-
-    @dev_bans.command(
-        help="List the bans on a Gateway Guild.",
-        usage="captcha dev bans list",
-        examples=["captcha dev bans list"],
-        name="list",
-        cls=Command,
-    )
-    async def dev_bans_list(self, ctx: Context, g_guild_id: int = 0):
-        captcha_module = self.bot.captcha
-        gateway_guilds: list[GatewayGuild] = captcha_module.get_gateway_guilds()
-
-        if g_guild_id <= 0 or g_guild_id > len(gateway_guilds):
-            bits = []
-
-            for i, g_guild in enumerate(gateway_guilds):
-                bits.append(f"**{i + 1}**. {g_guild.get_name()}")
-
-            return await embed_maker.message(
-                ctx,
-                description="Gateway Guilds. Guild IDs are highlighted: \n"
-                + "\n".join(bits),
-                title="Gateway Guilds",
-                send=True,
-            )
-        else:
-            g_guild = gateway_guilds[g_guild_id - 1]
-            bans = await g_guild.get_guild().bans()
-            max_page_size = 6
-            max_page_num = math.ceil(len(bans) / max_page_size)
-            page_constructor = functools.partial(
-                self.construct_dev_bans_embed,
-                ctx=ctx,
-                bans=bans,
-                max_page_num=max_page_num,
-                page_limit=max_page_size,
-            )
-            embed = await page_constructor(page=1)
-            message = await ctx.send(embed=embed)
-            menu = BookMenu(
-                message,
-                page=1,
-                max_page_num=max_page_num,
-                page_constructor=page_constructor,
-                author=ctx.author,
-            )
-            self.bot.reaction_menus.add(menu)
 
     @dev_bans.command(
         help="Reset bans on a Gateway Guild or all Gateway Guilds.",

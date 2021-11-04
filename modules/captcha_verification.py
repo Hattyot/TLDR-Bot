@@ -459,6 +459,9 @@ class DataManager:
     def get_registered_invite(self, invite_code: str):
         return self._registered_invitations.find_one({"code": invite_code})
 
+    def get_all_registered_invites(self, r_type: int):
+        return self._registered_invitations.find({"type": r_type})
+
 
 class TrackerManager:
     """
@@ -685,7 +688,6 @@ class TrackerManager:
         self.add_member_to_temporal_entry(invite_used.id, member.id)
         entry = self.get_temporal_entry(invite_used.id)
 
-        print(time.time() - entry["finished"])
         if entry["finished"] >= time.time():
             if len(entry["uses"]) >= self._minimum_member_count:
                 self._logger.info(f"Potential bot attack detected on {invite_used.id}.")
@@ -693,7 +695,6 @@ class TrackerManager:
                     "messages"
                 ]["used_unregistered_message"]
 
-                print(f"Uses: {entry['uses']}")
                 for member_id in entry["uses"]:
                     e_member: discord.Member = member.guild.get_member(member_id)
                     dm_channel: Union[TextChannel, None] = e_member.dm_channel
@@ -765,6 +766,7 @@ class CaptchaChannel:
         self._invite = None
         self._completed = False
         self._ttl = bot.captcha.get_config()["captcha_time_to_live"]
+        self._ttl_message_sent = False
         self._internal_clock = 0
         self._active = False
         self._logger = bot.logger
@@ -883,37 +885,48 @@ class CaptchaChannel:
                 else ("seconds" if default_ttl > 1 else "second")
             )
 
-            embed: discord.Embed = discord.Embed(
-                colour=config.EMBED_COLOUR,
-                title=self._bot.captcha.get_config()["messages"][
-                    "time_elapsed_message_title"
-                ],
-                description=self._bot.captcha.get_config()["messages"][
-                    "time_elapsed_message"
-                ].format(time_unit, time_value),
-            )
-
-            await self._channel.send(embed=embed)
-            self.countdown.stop()
-            self._data_manager.update_captcha_channel(
-                self._guild.id,
-                self._channel.id,
-                {
-                    "active": False,
-                    "stats": {"completed": False, "failed": True},
-                    "ttl": 0,
-                },
-            )
-            if self._bot.captcha.is_operator(self._member.id) is False:
-                if self._data_manager.is_blacklisted(self._member.id):
-                    return
-
-                await self._member.ban(reason="Failed to complete Captcha assessment.")
-                self._data_manager.add_member_to_blacklist(
-                    self._member, 900, "Failed to complete Captcha assessment."
+            if self._ttl_message_sent is False:
+                time_elapsed_message_title = self._bot.captcha.get_module_settings()[
+                    "messages"
+                ]["time_elapsed_message_title"]
+                time_elapsed_message = self._bot.captcha.get_module_settings()[
+                    "messages"
+                ]["time_elapsed_message"]
+                time_elapsed_message = time_elapsed_message.replace(
+                    "{time_unit}", str(time_unit)
+                ).replace("{time_value}", str(time_value))
+                embed: discord.Embed = discord.Embed(
+                    colour=config.EMBED_COLOUR,
+                    title=time_elapsed_message_title,
+                    description=time_elapsed_message,
                 )
 
-            await self.destory()
+                await self._channel.send(embed=embed)
+                self._ttl_message_sent = True
+
+            if self._ttl <= -10:
+                self.countdown.stop()
+                self._data_manager.update_captcha_channel(
+                    self._guild.id,
+                    self._channel.id,
+                    {
+                        "active": False,
+                        "stats": {"completed": False, "failed": True},
+                        "ttl": 0,
+                    },
+                )
+                if self._bot.captcha.is_operator(self._member.id) is False:
+                    if self._data_manager.is_blacklisted(self._member.id):
+                        return
+
+                    await self._member.ban(
+                        reason="Failed to complete Captcha assessment."
+                    )
+                    self._data_manager.add_member_to_blacklist(
+                        self._member, 900, "Failed to complete Captcha assessment."
+                    )
+
+                await self.destory()
 
     async def start(self, **kwargs):
         """
@@ -1192,7 +1205,7 @@ class GatewayGuild:
                 },
             )
             landing_channel_message = self._bot.captcha.get_config()["messages"][
-                "landing_channel"
+                "welcome_message"
             ].replace("{guild_name}", self._guild.name)
             # Add welcome message here; make welcome message configurable.
             await landing_channel.send(landing_channel_message)
@@ -1226,13 +1239,13 @@ class GatewayGuild:
                 )
                 await member.kick()
 
-    async def get_permantent_invite(self) -> Union[Invite, None]:
+    async def get_permantent_invite(self) -> Invite:
         invites: list[Invite] = await self._guild.invites()
 
         for invite in invites:
             if invite.max_uses == 0 and invite.max_age == 0:
                 return invite
-        return None
+        return await self._landing_channel.create_invite()
 
     def get_user_count(self):
         """
@@ -1483,7 +1496,7 @@ class CaptchaModule:
                     "reset_after_duration": 900,
                 },
                 "messages": {
-                    "landing_channel": "Welcome to {guild_name}! Please follow the following steps by the Family Foundation for the Foundation of Families.",
+                    "welcome_message": "Welcome to {guild_name}! Please follow the following steps by the Family Foundation for the Foundation of Families.",
                     "captcha_message_embed_title": "Try {current_try}. {tries_left} Attempts Left.",
                     "captcha_message_embed_description": "Try and type the text presented in the image correctly.",
                     "completed_captcha_message": "Well done! You have completed the captcha. Please click the following invite like. You will be kicked from this Gateway Guild once you have joined TLDR!\n\nInvite link: {invite_url}\n\nPS: If you share this invite link, you will be kicked off this guild having not joined the guild. This invite link only works once, and is only valid for the next two minutes.",
@@ -1855,7 +1868,7 @@ class CaptchaModule:
                     )
         self._data_manager.delete_blacklisted_members(cache_members_to_remove)
 
-    def set_setting(self, path: str, value: object):
+    async def set_setting(self, path: str, value: object):
         settings = self._settings_handler.get_settings(config.MAIN_SERVER)
 
         def keys():
@@ -1895,6 +1908,17 @@ class CaptchaModule:
                 settings[path] = value
             else:
                 walk(split_path, split_path[0], settings)
+
+        if "welcome_message" in path:
+            for g_guild in self._gateway_guilds:
+                landing_channel: TextChannel = g_guild.get_landing_channel()
+                await landing_channel.purge()
+                welcome_message = self.get_module_settings()["messages"][
+                    "welcome_message"
+                ]
+                await landing_channel.send(
+                    welcome_message.replace("{guild_name}", g_guild.get_guild().name)
+                )
 
     def construct_scheduled_report_embed(self, automatic: bool = False):
         last_update = self.get_settings()["modules"]["captcha"]["announcements"][
