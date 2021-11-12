@@ -23,5 +23,9 @@ SLACK_CLIENT_SECRET = config.get("SLACK_CLIENT_SECRET")
 SLACK_REDIRECT_DOMAIN = config.get("SLACK_REDIRECT_DOMAIN")
 EMBED_COLOUR = int(config.get("EMBED_COLOUR"), 16)
 
+<<<<<<< HEAD
 MODULES = {}  # {"clearance": False, "google_drive": False, "leveling": False}
+=======
+MODULES = {}
+>>>>>>> 1b484a5 (Undoing all of this. ffs me.)
 COGS = {}
