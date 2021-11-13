@@ -481,6 +481,12 @@ class UKParliamentModule:
             self._bot.logger.info("UKParliament Tracker: Polling Bills/Royal Assent.")
             await self.parliament.get_bills_tracker().poll()
 
+        self._bot.logger.info(
+            f"UKParliament Tracker: Divisions Tracker: {'Online' if self.parliament.get_divisions_tracker() is not None else 'Null'}"
+        )
+        self._bot.logger.info(
+            f"UKParliament Tracker: Division Listener: {'Online' if division_listener is not None else 'Null'}"
+        )
         if self.parliament.get_divisions_tracker() is not None and division_listener:
             self._bot.logger.info(
                 "UKParliament Tracker: Polling Commons and Lords Division."
