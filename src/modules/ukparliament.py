@@ -478,7 +478,9 @@ class UKParliamentModule:
         if self.parliament.get_bills_tracker() is not None and (
             feed_listener or royal_assent_listener
         ):
-            self._bot.logger.info("UKParliament Tracker: Polling Bills/Royal Assent.")
+            self._bot.logger.info(
+                "UKParliament Tracker: Polling Bills/Royal Assent. test"
+            )
             await self.parliament.get_bills_tracker().poll()
             print("Past Royal Assent polling.")
 
