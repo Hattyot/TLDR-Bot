@@ -458,6 +458,7 @@ class UKParliamentModule:
 
     @timers.loop(seconds=60)
     async def tracker_event_loop(self):
+        self._bot.logger.info("UKParliament Tracker Event Loop triggered.")
         division_listener = (
             self.tracker_status["lordsdivisions"]["started"]
             or self.tracker_status["commonsdivisions"]["started"]
