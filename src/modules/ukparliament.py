@@ -479,7 +479,7 @@ class UKParliamentModule:
             feed_listener or royal_assent_listener
         ):
             self._bot.logger.info("UKParliament Tracker: Polling Bills/Royal Assent.")
-            # await self.parliament.get_bills_tracker().poll()
+            await self.parliament.get_bills_tracker().poll()
             print("Past Royal Assent polling.")
 
         self._bot.logger.info(
