@@ -427,14 +427,12 @@ class UKParliamentModule:
         if channels["lords_divisions"] != 0 or channels["commons_divisions"] != 0:
             self.parliament.start_divisions_tracker(self._divisions_storage)
             if channels["commons_divisions"] != 0:
-                print("Registered commons division listener.")
                 self.parliament.get_divisions_tracker().register(
                     self.on_commons_division
                 )
                 self.tracker_status["commonsdivisions"]["started"] = True
 
             if channels["lords_divisions"] != 0:
-                print("Registered lords division listener.")
                 self.parliament.get_divisions_tracker().register(
                     self.on_lords_division, False
                 )
@@ -482,7 +480,6 @@ class UKParliamentModule:
                 "UKParliament Tracker: Polling Bills/Royal Assent. test"
             )
             await self.parliament.get_bills_tracker().poll()
-            print("Past Royal Assent polling.")
 
         self._bot.logger.info(
             f"UKParliament Tracker: Divisions Tracker: {'Online' if self.parliament.get_divisions_tracker() is not None else 'Null'}"
@@ -519,30 +516,22 @@ class UKParliamentModule:
         await channel.send(embed=embed)  # type: ignore
 
     async def on_royal_assent_update(self, feed: Feed, update: FeedUpdate):
-        print("on_royal_assent event.")
         channel = self._guild.get_channel(
             int(self.config.get_channel_id("royal_assent"))
         )
         if channel is None:
             return
-        print("channel is there")
         next_line = "\n"
-        print("creating embed.")
         embed = Embed(
             colour=discord.Colour.from_rgb(134, 72, 186), timestamp=datetime.now()
         )
-        print("created embed.")
         embed.title = f"**Royal Assent Given:** {update.get_title()}"
-        print("added title")
         embed.description = (
             f"**Signed At:** {update.get_update_date().strftime('%H:%M:%S on %Y:%m:%d')}{next_line}"
             f"**Summary:** {update.get_description()}"
         )
-        print("added description.")
         self.tracker_status["royalassent"]["confirmed"] = True
-        print("changed status")
         await channel.send(embed=embed)
-        print("sent embed.")
 
     async def on_commons_division(self, division: CommonsDivision, bill: Bill):
         channel = self._guild.get_channel(
@@ -550,12 +539,7 @@ class UKParliamentModule:
         )
         if channel is None:
             return
-        print(f"Commons Event: {division.get_division_title()}")
-        print(f"Commons Event Date: {division.get_division_date()}")
-
-        print("Getting commons division image.")
         division_file = await self.generate_division_image(self.parliament, division)
-        print("Got commons division image.")
         embed = Embed(
             color=discord.Colour.from_rgb(84, 174, 51), timestamp=datetime.now()
         )
@@ -579,7 +563,6 @@ class UKParliamentModule:
         embed.description = description
         embed.set_image(url="attachment://divisionimage.png")
         self.tracker_status["commonsdivisions"]["confirmed"] = True
-        print("Sending commons division embed.")
         await channel.send(
             file=division_file,
             embed=embed,
@@ -591,11 +574,7 @@ class UKParliamentModule:
         )
         if channel is None:
             return
-        print(f"Lords Event: {division.get_division_title()}")
-        print(f"Lords Event Date: {division.get_division_date()}")
-        print("Getting lords division image.")
         division_file = await self.generate_division_image(self.parliament, division)
-        print("Got lords division image.")
         embed = Embed(
             color=discord.Colour.from_rgb(166, 42, 22), timestamp=datetime.now()
         )
@@ -621,7 +600,6 @@ class UKParliamentModule:
         embed.description = description
         self.tracker_status["lordsdivisions"]["confirmed"] = True
         embed.set_image(url="attachment://divisionimage.png")
-        print("Sending lords division embed.")
         await channel.send(
             file=division_file,
             embed=embed,
