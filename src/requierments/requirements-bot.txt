@@ -1,7 +1,7 @@
+beautifulsoup4=4.9.3
 discord
 requests
 pymongo
-bs4
 cachetools
 google-api-python-client
 oauth2client
