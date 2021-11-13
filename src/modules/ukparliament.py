@@ -480,6 +480,7 @@ class UKParliamentModule:
         ):
             self._bot.logger.info("UKParliament Tracker: Polling Bills/Royal Assent.")
             await self.parliament.get_bills_tracker().poll()
+            print("Past Royal Assent polling.")
 
         self._bot.logger.info(
             f"UKParliament Tracker: Divisions Tracker: {'Online' if self.parliament.get_divisions_tracker() is not None else 'Null'}"
@@ -516,22 +517,30 @@ class UKParliamentModule:
         await channel.send(embed=embed)  # type: ignore
 
     async def on_royal_assent_update(self, feed: Feed, update: FeedUpdate):
+        print("on_royal_assent event.")
         channel = self._guild.get_channel(
             int(self.config.get_channel_id("royal_assent"))
         )
         if channel is None:
             return
+        print("channel is there")
         next_line = "\n"
+        print("creating embed.")
         embed = Embed(
             colour=discord.Colour.from_rgb(134, 72, 186), timestamp=datetime.now()
         )
+        print("created embed.")
         embed.title = f"**Royal Assent Given:** {update.get_title()}"
+        print("added title")
         embed.description = (
             f"**Signed At:** {update.get_update_date().strftime('%H:%M:%S on %Y:%m:%d')}{next_line}"
             f"**Summary:** {update.get_description()}"
         )
+        print("added description.")
         self.tracker_status["royalassent"]["confirmed"] = True
+        print("changed status")
         await channel.send(embed=embed)
+        print("sent embed.")
 
     async def on_commons_division(self, division: CommonsDivision, bill: Bill):
         channel = self._guild.get_channel(
