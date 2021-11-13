@@ -470,27 +470,14 @@ class UKParliamentModule:
             self.parliament.get_publications_tracker() is not None
             and publications_listener
         ):
-            self._bot.logger.info("UKParliament  Tracker: Polling publications.")
             await self.parliament.get_publications_tracker().poll()
 
         if self.parliament.get_bills_tracker() is not None and (
             feed_listener or royal_assent_listener
         ):
-            self._bot.logger.info(
-                "UKParliament Tracker: Polling Bills/Royal Assent. test"
-            )
             await self.parliament.get_bills_tracker().poll()
 
-        self._bot.logger.info(
-            f"UKParliament Tracker: Divisions Tracker: {'Online' if self.parliament.get_divisions_tracker() is not None else 'Null'}"
-        )
-        self._bot.logger.info(
-            f"UKParliament Tracker: Division Listener: {'Online' if division_listener is not None else 'Null'}"
-        )
         if self.parliament.get_divisions_tracker() is not None and division_listener:
-            self._bot.logger.info(
-                "UKParliament Tracker: Polling Commons and Lords Division."
-            )
             await self.parliament.get_divisions_tracker().poll_commons()
             await self.parliament.get_divisions_tracker().poll_lords()
 
