@@ -1461,7 +1461,44 @@ class CaptchaModule:
         self._announcement_channel = None
         self.unban_task.start()
         self._tracker_manager = TrackerManager(bot)
-
+        self._default_settings = {
+            "operators": [],
+            "guild_name": "Gateway Guild {number}",
+            "landing_channel_name": "welcome",
+            "main_guild_landing_channel": None,
+            "main_announcement_channel": 0,
+            "captcha_time_to_live": 900,
+            "blacklist_length": 86400,
+            "unregistered_invitations": {
+                "minimum_member_count": 1,
+                "join_timeout": 10,
+            },
+            "announcements": {
+                "announcement_channel": None,
+                "scheduled_report": {"last_report": None, "interval": 86400},
+            },
+            "gateway_rejoin": {
+                "limit": 3,
+                "blacklist_duration": 86400,
+                "reset_after_duration": 900,
+            },
+            "messages": {
+                "welcome_message": "Welcome to {guild_name}! Please follow the following steps by the Family Foundation for the Foundation of Families.",
+                "captcha_message_embed_title": "Try {current_try}. {tries_left} Attempts Left.",
+                "captcha_message_embed_description": "Try and type the text presented in the image correctly.",
+                "completed_captcha_message": "Well done! You have completed the captcha. Please click the following invite like. You will be kicked from this Gateway Guild once you have joined TLDR!\n\nInvite link: {invite_url}\n\nPS: If you share this invite link, you will be kicked off this guild having not joined the guild. This invite link only works once, and is only valid for the next two minutes.",
+                "completed_captcha_message_title": "Successfully Completed Captcha.",
+                "bot_startup_captcha_message": "Sorry for the inconvenence, the bot has now started up again. You have {time_value} {time_unit} remaining, and {try_count} attempts left.",
+                "incorrect_captcha_message": "Incorrect. Try again :).",
+                "failed_captcha_message": "You have failed all Captcha attempts this time. You will be blacklisted for 24 hours. After this blacklist time has elapsed, you may come back and try again :).",
+                "failed_captcha_message_title": "Too many tries.",
+                "countdown_alert_message": "You have {time_value} {time_unit} remaining.",
+                "countdown_alert_message_title": "Alert!",
+                "time_elapsed_message": "Your time has elapsed. You have had {time_value} {time_unit} to complete the captcha, you did not. Unfortunately this means you will be blacklisted for 24 hours after which you can rejoin a Gateway Guild and try again.",
+                "time_elapsed_message_title": "Timer Elapsed",
+                "used_unregistered_message": "You have used an unregistered invitation to join the main server, what is more the bot has identified you as a potential bot in a bot attack. Apologises if this is incorect. In order to rejoin, please go through our Captcha Process. {invite}",
+            },
+        }
         if config.MAIN_SERVER == 0:
             bot.logger.info(
                 "Captcha Gateway Module required the MAIN_SERVER variable in config.py to be set to a non-zero value (a valid guild id). Will not initate module."
@@ -1474,45 +1511,11 @@ class CaptchaModule:
             self._logger.info(
                 "Captcha Gateway settings not found in Guild settings. Adding default settings now."
             )
-            settings["modules"]["captcha"] = {
-                "operators": [],
-                "guild_name": "Gateway Guild {number}",
-                "landing_channel_name": "welcome",
-                "main_guild_landing_channel": None,
-                "main_announcement_channel": 0,
-                "captcha_time_to_live": 900,
-                "blacklist_length": 86400,
-                "unregistered_invitations": {
-                    "minimum_member_count": 1,
-                    "join_timeout": 10,
-                },
-                "announcements": {
-                    "announcement_channel": None,
-                    "scheduled_report": {"last_report": None, "interval": 86400},
-                },
-                "gateway_rejoin": {
-                    "limit": 3,
-                    "blacklist_duration": 86400,
-                    "reset_after_duration": 900,
-                },
-                "messages": {
-                    "welcome_message": "Welcome to {guild_name}! Please follow the following steps by the Family Foundation for the Foundation of Families.",
-                    "captcha_message_embed_title": "Try {current_try}. {tries_left} Attempts Left.",
-                    "captcha_message_embed_description": "Try and type the text presented in the image correctly.",
-                    "completed_captcha_message": "Well done! You have completed the captcha. Please click the following invite like. You will be kicked from this Gateway Guild once you have joined TLDR!\n\nInvite link: {invite_url}\n\nPS: If you share this invite link, you will be kicked off this guild having not joined the guild. This invite link only works once, and is only valid for the next two minutes.",
-                    "completed_captcha_message_title": "Successfully Completed Captcha.",
-                    "bot_startup_captcha_message": "Sorry for the inconvenence, the bot has now started up again. You have {time_value} {time_unit} remaining, and {try_count} attempts left.",
-                    "incorrect_captcha_message": "Incorrect. Try again :).",
-                    "failed_captcha_message": "You have failed all Captcha attempts this time. You will be blacklisted for 24 hours. After this blacklist time has elapsed, you may come back and try again :).",
-                    "failed_captcha_message_title": "Too many tries.",
-                    "countdown_alert_message": "You have {time_value} {time_unit} remaining.",
-                    "countdown_alert_message_title": "Alert!",
-                    "time_elapsed_message": "Your time has elapsed. You have had {time_value} {time_unit} to complete the captcha, you did not. Unfortunately this means you will be blacklisted for 24 hours after which you can rejoin a Gateway Guild and try again.",
-                    "time_elapsed_message_title": "Timer Elapsed",
-                    "used_unregistered_message": "You have used an unregistered invitation to join the main server, what is more the bot has identified you as a potential bot in a bot attack. Apologises if this is incorect. In order to rejoin, please go through our Captcha Process. {invite}",
-                },
-            }
+            settings["modules"]["captcha"] = self._default_settings
             self._settings_handler.save(settings)
+        self._settings_handler.update(
+            "captcha", self._default_settings, config.MAIN_SERVER
+        )
         self._logger.info("Captcha Gateway settings found.")
         self._logger.info("Captcha Gateway Module initiated.")
         self._bot.add_listener(self.on_ready, "on_ready")
