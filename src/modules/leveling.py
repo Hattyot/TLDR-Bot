@@ -1253,8 +1253,9 @@ class LevelingSystem:
         if not self.bot._ready.is_set():
             return
 
-        if message.guild.id != config.MAIN_SERVER and config.MAIN_SERVER != 0:
-            return
+        if message.guild is not None:
+            if message.guild.id != config.MAIN_SERVER and config.MAIN_SERVER != 0:
+                return
 
         if (
             message.author.bot
